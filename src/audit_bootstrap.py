@@ -76,13 +76,30 @@ def main() -> None:
             if result.get("status") == "failed" and result.get("security_id"):
                 failed_by_id[str(result["security_id"])] = {**result, "manifest_key": key}
 
+    persistent_unavailable: set[str] = set()
+    repair_report_keys = [
+        key
+        for key in manifest_keys
+        if key.rsplit("/", 1)[-1].startswith("repair-run-")
+    ]
+    for key in repair_report_keys:
+        report = read_json(s3, bucket, key)
+        for result in report.get("results", []):
+            if result.get("status") == "still_unavailable" and result.get("security_id"):
+                persistent_unavailable.add(str(result["security_id"]))
+
     missing = sorted(set(confirmed) - available)
     repair_queue = []
     for security_id in missing:
         member = confirmed[security_id]
         failure = failed_by_id.get(security_id, {})
         known_reason = KNOWN_DELISTED.get(security_id)
-        category = "delisted_or_merger" if known_reason else "retry_required"
+        if known_reason:
+            category = "delisted_or_merger"
+        elif security_id in persistent_unavailable:
+            category = "persistent_unavailable"
+        else:
+            category = "retry_required"
         repair_queue.append(
             {
                 "security_id": security_id,
@@ -104,22 +121,32 @@ def main() -> None:
         "all_parquet_objects": len(available),
         "extra_historical_objects": len(available - set(confirmed)),
         "manifest_files_scanned": len(manifest_keys),
-        "repair_categories": {
+        "unavailable_categories": {
             category: sum(item["category"] == category for item in repair_queue)
-            for category in ("delisted_or_merger", "retry_required")
+            for category in ("delisted_or_merger", "persistent_unavailable", "retry_required")
         },
     }
-    queue_document = {**summary, "records": repair_queue}
+    actionable = [item for item in repair_queue if item["category"] == "retry_required"]
+    exclusions = [item for item in repair_queue if item["category"] != "retry_required"]
+    queue_document = {**summary, "records": actionable}
+    unavailable_document = {**summary, "records": repair_queue}
+    exclusions_document = {**summary, "records": exclusions}
 
     queue_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/repair_queue.json"
     summary_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/audit_summary.json"
+    unavailable_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/data_unavailable.json"
+    exclusions_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/exclusions.json"
     s3.put_object(Bucket=bucket, Key=queue_key, Body=json.dumps(queue_document, indent=2).encode(), ContentType="application/json")
     s3.put_object(Bucket=bucket, Key=summary_key, Body=json.dumps(summary, indent=2).encode(), ContentType="application/json")
+    s3.put_object(Bucket=bucket, Key=unavailable_key, Body=json.dumps(unavailable_document, indent=2).encode(), ContentType="application/json")
+    s3.put_object(Bucket=bucket, Key=exclusions_key, Body=json.dumps(exclusions_document, indent=2).encode(), ContentType="application/json")
 
     print(json.dumps(summary, indent=2))
     print(f"Repair queue: {queue_key}")
-    if missing:
-        print(f"::warning title=OHLCV repair queue::{len(missing)} confirmed-compliant securities need review")
+    print(f"Data unavailable: {unavailable_key}")
+    print(f"Non-actionable exclusions: {exclusions_key}")
+    if actionable:
+        print(f"::warning title=OHLCV repair queue::{len(actionable)} securities still need retry")
 
 
 if __name__ == "__main__":
