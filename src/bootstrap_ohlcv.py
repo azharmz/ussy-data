@@ -233,6 +233,7 @@ def run(args: argparse.Namespace) -> int:
             LOG.info("Uploaded %s (%s rows)", key, len(history))
         except Exception as exc:
             LOG.error("Failed %s (%s): %s", ticker, security_id, exc)
+            print(f"::warning title=OHLCV unavailable::{ticker} ({security_id}): {str(exc)[:300]}")
             result = Result(security_id, ticker, symbol, "failed", error=str(exc)[:500])
         results.append(result)
 
@@ -258,7 +259,17 @@ def run(args: argparse.Namespace) -> int:
     )
     LOG.info("Manifest: %s", manifest_key)
     LOG.info("Summary: %s", report["summary"])
-    return 1 if report["summary"]["failed"] else 0
+    attempted = report["summary"]["uploaded"] + report["summary"]["failed"]
+    failure_rate = report["summary"]["failed"] / attempted if attempted else 0
+    if failure_rate > 0.10:
+        LOG.error("Failure rate %.1f%% exceeds the 10%% safety threshold", failure_rate * 100)
+        return 1
+    if report["summary"]["failed"]:
+        LOG.warning(
+            "Batch completed with %s unavailable ticker(s); see manifest repair queue",
+            report["summary"]["failed"],
+        )
+    return 0
 
 
 def main() -> None:
