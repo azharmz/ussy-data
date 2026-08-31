@@ -1,0 +1,56 @@
+name: Build production rolling OHLCV
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: Musaffa membership snapshot date (YYYY-MM-DD)
+        required: true
+        default: "2026-08-28"
+      rolling_bars:
+        description: Maximum bars per security in rolling dataset
+        required: true
+        default: "300"
+      minimum_ready_bars:
+        description: Minimum bars required for production signals
+        required: true
+        default: "250"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-rolling
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Build and verify rolling dataset
+        run: |
+          python src/build_rolling.py \
+            --snapshot-date "${{ inputs.snapshot_date }}" \
+            --rolling-bars "${{ inputs.rolling_bars }}" \
+            --minimum-ready-bars "${{ inputs.minimum_ready_bars }}"
+
