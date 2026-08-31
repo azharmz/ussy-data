@@ -1,0 +1,95 @@
+name: Upload Musaffa universe to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: Snapshot date in YYYY-MM-DD format
+        required: true
+        default: "2026-08-28"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musaffa-universe-upload
+  cancel-in-progress: false
+
+jobs:
+  validate-upload-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      SNAPSHOT_DATE: ${{ inputs.snapshot_date }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate input and required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SNAPSHOT_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || {
+            echo "::error::snapshot_date must use YYYY-MM-DD"
+            exit 1
+          }
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY R2_ENDPOINT R2_BUCKET_NAME; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is not configured"
+              exit 1
+            fi
+          done
+
+      - name: Validate Musaffa JSON files
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            "universe/musaffa_snapshot_${SNAPSHOT_DATE}.json"
+            "universe/musaffa_security_master_${SNAPSHOT_DATE}.json"
+            "universe/musaffa_membership_${SNAPSHOT_DATE}.json"
+          )
+          for file in "${files[@]}"; do
+            test -s "${file}" || {
+              echo "::error::Missing or empty file: ${file}"
+              exit 1
+            }
+            jq -e '
+              (.snapshot_date | type == "string") and
+              (.count | type == "number") and
+              (.records | type == "array") and
+              (.count == (.records | length))
+            ' "${file}" >/dev/null || {
+              echo "::error::Invalid schema or record count: ${file}"
+              exit 1
+            }
+            echo "Validated ${file}: $(jq -r '.count' "${file}") records"
+          done
+
+      - name: Upload universe files to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp "universe/musaffa_snapshot_${SNAPSHOT_DATE}.json"             "s3://${R2_BUCKET_NAME}/universe/raw/${SNAPSHOT_DATE}/musaffa_snapshot.json"             --endpoint-url "${R2_ENDPOINT}"             --content-type "application/json"             --no-progress
+          aws s3 cp "universe/musaffa_security_master_${SNAPSHOT_DATE}.json"             "s3://${R2_BUCKET_NAME}/universe/security_master/${SNAPSHOT_DATE}.json"             --endpoint-url "${R2_ENDPOINT}"             --content-type "application/json"             --no-progress
+          aws s3 cp "universe/musaffa_membership_${SNAPSHOT_DATE}.json"             "s3://${R2_BUCKET_NAME}/universe/membership/${SNAPSHOT_DATE}.json"             --endpoint-url "${R2_ENDPOINT}"             --content-type "application/json"             --no-progress
+
+      - name: Verify uploaded objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          keys=(
+            "universe/raw/${SNAPSHOT_DATE}/musaffa_snapshot.json"
+            "universe/security_master/${SNAPSHOT_DATE}.json"
+            "universe/membership/${SNAPSHOT_DATE}.json"
+          )
+          for key in "${keys[@]}"; do
+            aws s3api head-object               --bucket "${R2_BUCKET_NAME}"               --key "${key}"               --endpoint-url "${R2_ENDPOINT}"               --query '{ContentLength:ContentLength,ContentType:ContentType,ETag:ETag}'               --output json
+            echo "Verified R2 object: ${key}"
+          done
