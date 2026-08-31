@@ -20,6 +20,10 @@ on:
         required: true
         type: boolean
         default: false
+      request_delay:
+        description: Delay between Yahoo tickers in seconds
+        required: true
+        default: "2.0"
 
 permissions:
   contents: read
@@ -70,6 +74,7 @@ jobs:
             --snapshot-date "${{ inputs.snapshot_date }}"
             --start-index "${{ inputs.start_index }}"
             --batch-size "${{ inputs.batch_size }}"
+            --request-delay "${{ inputs.request_delay }}"
           )
           if [ "${{ inputs.force }}" = "true" ]; then
             args+=(--force)
