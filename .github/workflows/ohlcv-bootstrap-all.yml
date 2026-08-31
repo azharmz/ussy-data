@@ -22,7 +22,7 @@ on:
       request_delay:
         description: Delay between Yahoo tickers in seconds
         required: true
-        default: "2.0"
+        default: "3.0"
 
 permissions:
   contents: read
@@ -64,7 +64,7 @@ jobs:
     needs: prepare
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         start_index: ${{ fromJSON(needs.prepare.outputs.starts) }}
     runs-on: ubuntu-latest
