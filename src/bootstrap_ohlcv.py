@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=25)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--request-delay", type=float, default=2.0)
     return parser.parse_args()
 
 
@@ -55,6 +56,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("batch-size must be between 1 and 100")
     if not 1 <= args.max_retries <= 5:
         raise ValueError("max-retries must be between 1 and 5")
+    if not 0 <= args.request_delay <= 10:
+        raise ValueError("request-delay must be between 0 and 10 seconds")
 
 
 def make_s3_client():
@@ -119,7 +122,10 @@ def download_history(symbol: str, max_retries: int) -> pd.DataFrame:
         except Exception as exc:  # yfinance raises several transport/parser exception types
             last_error = exc
             if attempt < max_retries:
-                delay = (2 ** (attempt - 1)) + random.random()
+                if exc.__class__.__name__ == "YFRateLimitError":
+                    delay = 60 * attempt + random.uniform(0, 10)
+                else:
+                    delay = (2 ** (attempt - 1)) + random.random()
                 LOG.warning("Download failed for %s (attempt %s/%s); retrying in %.1fs", symbol, attempt, max_retries, delay)
                 time.sleep(delay)
     raise RuntimeError(f"download failed after {max_retries} attempts: {last_error}")
@@ -185,7 +191,7 @@ def run(args: argparse.Namespace) -> int:
 
     LOG.info("Processing membership rows %s..%s of %s", args.start_index, args.start_index + len(selected) - 1, len(membership))
     results: list[Result] = []
-    for record in selected:
+    for position, record in enumerate(selected):
         security_id = str(record["security_id"])
         ticker = str(record["ticker"])
         symbol = yahoo_symbol(ticker)
@@ -196,6 +202,10 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         try:
+            if position > 0 and args.request_delay:
+                delay = args.request_delay + random.uniform(0, min(0.5, args.request_delay / 4))
+                LOG.info("Rate-limit delay: %.2fs", delay)
+                time.sleep(delay)
             history = normalize_history(download_history(symbol, args.max_retries), security_id, ticker)
             upload_parquet(s3, bucket, key, history)
             result = Result(
@@ -224,6 +234,7 @@ def run(args: argparse.Namespace) -> int:
         "start_index": args.start_index,
         "batch_size": len(selected),
         "force": args.force,
+        "request_delay": args.request_delay,
         "summary": {status: sum(item.status == status for item in results) for status in ("uploaded", "skipped", "failed")},
         "results": [asdict(item) for item in results],
     }
@@ -245,5 +256,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
