@@ -1,0 +1,78 @@
+name: Bootstrap historical OHLCV
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: Musaffa membership snapshot date (YYYY-MM-DD)
+        required: true
+        default: "2026-08-28"
+      start_index:
+        description: Zero-based starting row after sorting by security_id
+        required: true
+        default: "0"
+      batch_size:
+        description: Securities to process in this run (1-100)
+        required: true
+        default: "25"
+      force:
+        description: Replace Parquet files that already exist
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohlcv-bootstrap-${{ inputs.start_index }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT R2_BUCKET_NAME; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is not configured"
+              exit 1
+            fi
+          done
+
+      - name: Bootstrap OHLCV batch
+        shell: bash
+        run: |
+          args=(
+            --snapshot-date "${{ inputs.snapshot_date }}"
+            --start-index "${{ inputs.start_index }}"
+            --batch-size "${{ inputs.batch_size }}"
+          )
+          if [ "${{ inputs.force }}" = "true" ]; then
+            args+=(--force)
+          fi
+          python src/bootstrap_ohlcv.py "${args[@]}"
+
