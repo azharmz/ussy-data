@@ -1,0 +1,52 @@
+name: Retry missing OHLCV
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: Musaffa membership snapshot date (YYYY-MM-DD)
+        required: true
+        default: "2026-08-28"
+      max_records:
+        description: Maximum retry-required securities to process
+        required: true
+        default: "24"
+      request_delay:
+        description: Delay between Yahoo tickers in seconds
+        required: true
+        default: "5.0"
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Retry missing OHLCV
+        run: |
+          python src/repair_ohlcv.py \
+            --snapshot-date "${{ inputs.snapshot_date }}" \
+            --max-records "${{ inputs.max_records }}" \
+            --request-delay "${{ inputs.request_delay }}"
+
