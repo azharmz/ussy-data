@@ -1,6 +1,5 @@
 boto3>=1.35,<2
-pandas>=2.2,<4
+pandas>=2.2,<3
 pyarrow>=18,<24
 yfinance>=0.2.54,<1
-
 
