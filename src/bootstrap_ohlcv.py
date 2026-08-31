@@ -83,6 +83,18 @@ def load_membership(s3, bucket: str, snapshot_date: str) -> list[dict[str, Any]]
         if not required.issubset(record) or not all(record.get(field) for field in required):
             raise ValueError(f"Membership record {index} lacks security_id or ticker")
 
+    source_count = len(records)
+    records = [
+        record
+        for record in records
+        if record.get("sharia_compliance") == "COMPLIANT"
+        and record.get("musaffaHalalRating") == "COMPLIANT"
+    ]
+    LOG.info(
+        "Conservative compliance filter retained %s of %s membership records",
+        len(records),
+        source_count,
+    )
     records.sort(key=lambda row: (str(row["security_id"]), str(row["ticker"])))
     return records
 
