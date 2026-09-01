@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-28T00:00:00Z",
+  "snapshot_date": "2026-08-28",
+  "pipeline_status": "OPERATIONAL",
+  "universe": {
+    "confirmed_compliant": 1087,
+    "included_in_rolling": 1060,
+    "ready": 1023,
+    "insufficient_history": 37,
+    "data_unavailable": 27,
+    "rolling_rows": 311877,
+    "rolling_bars_target": 300,
+    "minimum_ready_bars": 250
+  },
+  "changes": {
+    "previous_snapshot_date": null,
+    "added_count": 0,
+    "removed_count": 0,
+    "ticker_changes_count": 0,
+    "added": [],
+    "removed": [],
+    "ticker_changes": []
+  },
+  "freshness": {
+    "post_earnings_refreshed": 0,
+    "awaiting_next_earnings": 0,
+    "potentially_stale": 0,
+    "unknown": 0
+  },
+  "review_queue": [
+    {
+      "security_id": "IE00BDGMC594",
+      "ticker": "AVDL",
+      "category": "DATA_UNAVAILABLE",
+      "reason": "Yahoo Finance returned no rows",
+      "screening_updated_at": null,
+      "recorded_earnings_date": null,
+      "last_market_date": null
+    }
+  ]
+}

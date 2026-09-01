@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USSY Data Control</title>
+<style>
+  :root {
+    --bg: #0a0f0c;
+    --surface: #101612;
+    --surface-raised: #141c17;
+    --border: #202b24;
+    --border-strong: #2c3a31;
+    --text: #e6ede8;
+    --text-muted: #8fa197;
+    --text-faint: #5d6d64;
+    --emerald: #35d18f;
+    --emerald-dim: #1f7a56;
+    --amber: #e0a341;
+    --red: #e2604f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  a { color: var(--emerald); }
+
+  button {
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--emerald);
+    outline-offset: 2px;
+  }
+
+  .shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 20px 64px;
+  }
+
+  /* ---------- header ---------- */
+  header.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(10, 15, 12, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    margin: 0 0 20px;
+  }
+  .topbar-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .brand h1 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 100px;
+    font-size: 0.78rem;
+    font-family: var(--mono);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .status-OPERATIONAL .status-dot { background: var(--emerald); }
+  .status-OPERATIONAL { color: var(--emerald); border-color: var(--emerald-dim); }
+  .status-DEGRADED .status-dot { background: var(--amber); }
+  .status-DEGRADED { color: var(--amber); border-color: #6b5326; }
+  .status-STALE .status-dot { background: var(--amber); }
+  .status-STALE { color: var(--amber); border-color: #6b5326; }
+  .status-ERROR .status-dot { background: var(--red); }
+  .status-ERROR { color: var(--red); border-color: #6b2e26; }
+  .status-UNKNOWN .status-dot { background: var(--text-faint); }
+  .status-UNKNOWN { color: var(--text-faint); }
+
+  .meta-line {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-actions { display: flex; align-items: center; gap: 10px; }
+  .btn {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .btn:hover { border-color: var(--emerald-dim); background: #16211b; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.primary { border-color: var(--emerald-dim); color: var(--emerald); }
+
+  /* ---------- banners ---------- */
+  .banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #6b5326;
+    background: #1c1608;
+    color: var(--amber);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+  }
+  .banner.show { display: flex; }
+
+  .empty-error {
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .empty-error h2 { color: var(--text); font-size: 1rem; margin: 0 0 8px; }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 28px; }
+  section > h2 {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    letter-spacing: 0.01em;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card .value {
+    font-family: var(--mono);
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .card .value.warn { color: var(--amber); }
+  .card .value.bad { color: var(--red); }
+  .card .label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+
+  .stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .stat-chip {
+    flex: 1 1 150px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .stat-chip .value {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .stat-chip .label { font-size: 0.76rem; color: var(--text-muted); }
+
+  .progress-track {
+    height: 6px;
+    border-radius: 100px;
+    background: var(--border);
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--emerald);
+    border-radius: 100px;
+  }
+
+  .disclaimer {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
+  /* ---------- review queue ---------- */
+  .queue-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .queue-controls input[type="search"],
+  .queue-controls select {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+  }
+  .queue-controls input[type="search"] { flex: 1 1 200px; min-width: 160px; }
+  .queue-count {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    min-width: 640px;
+  }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-strong);
+    background: var(--surface-raised);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface); }
+  td.ticker { font-family: var(--mono); font-weight: 600; }
+  td.security-id { font-family: var(--mono); color: var(--text-muted); font-size: 0.8rem; }
+
+  .cat-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    border: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  .cat-POTENTIALLY_STALE { color: var(--amber); border-color: #6b5326; }
+  .cat-UNKNOWN { color: var(--text-faint); }
+  .cat-DATA_UNAVAILABLE { color: var(--red); border-color: #6b2e26; }
+  .cat-INSUFFICIENT_HISTORY { color: var(--amber); border-color: #6b5326; }
+  .cat-DAILY_UPDATE_FAILED { color: var(--red); border-color: #6b2e26; }
+
+  .queue-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  footer.foot {
+    margin-top: 30px;
+    font-size: 0.76rem;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="brand">
+        <h1>USSY Data Control</h1>
+        <span id="pipelinePill" class="status-pill status-UNKNOWN">
+          <span class="status-dot"></span>
+          <span id="pipelineLabel">Loading&hellip;</span>
+        </span>
+      </div>
+      <div class="meta-line">
+        <span>Snapshot: <span id="snapshotDate">&mdash;</span></span>
+        <span>Last synchronized: <span id="generatedAt">&mdash;</span></span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="refreshBtn" class="btn primary" type="button">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+
+  <div id="staleBanner" class="banner" role="status" aria-live="polite">
+    Data temporarily unavailable &mdash; showing the last data that loaded successfully.
+  </div>
+
+  <div id="liveRegion" class="sr-only" aria-live="polite"></div>
+
+  <div id="loadingState" class="empty-error">
+    <h2>Loading status&hellip;</h2>
+    <p>Fetching the latest pipeline snapshot.</p>
+  </div>
+
+  <div id="errorState" class="empty-error" style="display:none;">
+    <h2>Couldn't load pipeline status</h2>
+    <p id="errorDetail">The status feed didn't respond.</p>
+    <button id="retryBtn" class="btn primary" type="button">Retry</button>
+  </div>
+
+  <div id="content" style="display:none;">
+
+    <section aria-labelledby="summary-h">
+      <h2 id="summary-h">Universe summary</h2>
+      <div class="card-grid">
+        <div class="card">
+          <div class="value" id="valCompliant">&mdash;</div>
+          <div class="label">Confirmed compliant</div>
+        </div>
+        <div class="card">
+          <div class="value" id="valReady">&mdash;</div>
+          <div class="label">Ready for MA/EMA 200</div>
+        </div>
+        <div class="card">
+          <div class="value warn" id="valInsufficient">&mdash;</div>
+          <div class="label">Insufficient history</div>
+        </div>
+        <div class="card">
+          <div class="value bad" id="valUnavailable">&mdash;</div>
+          <div class="label">Data unavailable</div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="coverage-h">
+      <h2 id="coverage-h">Data coverage</h2>
+      <div class="card">
+        <div class="stat-row">
+          <div class="stat-chip">
+            <div class="value" id="covIncluded">&mdash;</div>
+            <div class="label">Included in rolling</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value" id="covRows">&mdash;</div>
+            <div class="label">Rolling rows</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value" id="covPct">&mdash;</div>
+            <div class="label">Ready %</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value" id="covBars">&mdash;</div>
+            <div class="label">Min / target bars</div>
+          </div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="covProgress" style="width:0%"></div></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="changes-h">
+      <h2 id="changes-h">Universe changes</h2>
+      <div class="card-grid">
+        <div class="card">
+          <div class="value" id="chAdded">&mdash;</div>
+          <div class="label">Added</div>
+        </div>
+        <div class="card">
+          <div class="value" id="chRemoved">&mdash;</div>
+          <div class="label">Removed</div>
+        </div>
+        <div class="card">
+          <div class="value" id="chTicker">&mdash;</div>
+          <div class="label">Ticker changes</div>
+        </div>
+        <div class="card">
+          <div class="value" id="chPrev" style="font-size:1.1rem;">&mdash;</div>
+          <div class="label">Previous snapshot</div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="freshness-h">
+      <h2 id="freshness-h">Screening freshness</h2>
+      <div class="card">
+        <div class="stat-row">
+          <div class="stat-chip">
+            <div class="value" id="frRefreshed">&mdash;</div>
+            <div class="label">Post-earnings refreshed</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value" id="frAwaiting">&mdash;</div>
+            <div class="label">Awaiting next earnings</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value warn" id="frStale">&mdash;</div>
+            <div class="label">Potentially stale</div>
+          </div>
+          <div class="stat-chip">
+            <div class="value" id="frUnknown">&mdash;</div>
+            <div class="label">Unknown</div>
+          </div>
+        </div>
+        <p class="disclaimer">Freshness merupakan audit perbandingan timestamp, bukan verifikasi independen atas periode laporan keuangan yang digunakan Musaffa.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="queue-h">
+      <h2 id="queue-h">Review queue</h2>
+      <div class="queue-controls">
+        <input type="search" id="queueSearch" placeholder="Search ticker or security ID&hellip;" aria-label="Search ticker or security ID">
+        <select id="queueFilter" aria-label="Filter by category">
+          <option value="">All categories</option>
+          <option value="POTENTIALLY_STALE">Potentially stale</option>
+          <option value="UNKNOWN">Unknown</option>
+          <option value="DATA_UNAVAILABLE">Data unavailable</option>
+          <option value="INSUFFICIENT_HISTORY">Insufficient history</option>
+          <option value="DAILY_UPDATE_FAILED">Daily update failed</option>
+        </select>
+        <button id="queueReset" class="btn" type="button">Reset</button>
+      </div>
+      <div class="queue-count" id="queueCount">0 records</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Ticker</th>
+              <th scope="col">Security ID</th>
+              <th scope="col">Category</th>
+              <th scope="col">Reason</th>
+              <th scope="col">Screening updated</th>
+              <th scope="col">Recorded earnings</th>
+              <th scope="col">Last market date</th>
+            </tr>
+          </thead>
+          <tbody id="queueBody"></tbody>
+        </table>
+        <div id="queueEmpty" class="queue-empty" style="display:none;">No records match this filter.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="foot">USSY Data Control &middot; public, read-only pipeline monitor</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var STATUS_URL = "./status.json";
+  var SUPPORTED_SCHEMA_VERSIONS = [1];
+
+  var lastGoodDoc = null;
+
+  var els = {
+    loading: document.getElementById("loadingState"),
+    error: document.getElementById("errorState"),
+    errorDetail: document.getElementById("errorDetail"),
+    content: document.getElementById("content"),
+    staleBanner: document.getElementById("staleBanner"),
+    liveRegion: document.getElementById("liveRegion"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    retryBtn: document.getElementById("retryBtn"),
+    pipelinePill: document.getElementById("pipelinePill"),
+    pipelineLabel: document.getElementById("pipelineLabel"),
+    snapshotDate: document.getElementById("snapshotDate"),
+    generatedAt: document.getElementById("generatedAt"),
+    queueSearch: document.getElementById("queueSearch"),
+    queueFilter: document.getElementById("queueFilter"),
+    queueReset: document.getElementById("queueReset"),
+    queueBody: document.getElementById("queueBody"),
+    queueCount: document.getElementById("queueCount"),
+    queueEmpty: document.getElementById("queueEmpty")
+  };
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function announce(msg) {
+    els.liveRegion.textContent = msg;
+  }
+
+  function isPlainObject(v) {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  }
+
+  function isFiniteNonNegative(n) {
+    return typeof n === "number" && isFinite(n) && n >= 0;
+  }
+
+  function validateDoc(doc) {
+    if (!isPlainObject(doc)) throw new Error("Response was not a JSON object");
+    if (SUPPORTED_SCHEMA_VERSIONS.indexOf(doc.schema_version) === -1) {
+      throw new Error("Unsupported schema_version: " + doc.schema_version);
+    }
+    if (!isPlainObject(doc.universe)) throw new Error("Missing universe object");
+    if (!isPlainObject(doc.changes)) throw new Error("Missing changes object");
+    if (!isPlainObject(doc.freshness)) throw new Error("Missing freshness object");
+    if (!Array.isArray(doc.review_queue)) throw new Error("Missing review_queue array");
+    return doc;
+  }
+
+  function fmtNum(n) {
+    if (n === null || n === undefined) return "&mdash;".replace("&mdash;", "\u2014");
+    if (typeof n !== "number" || !isFinite(n)) return "\u2014";
+    return n.toLocaleString("en-US");
+  }
+
+  function fmtDateTime(iso) {
+    if (!iso) return "\u2014";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      year: "numeric", month: "short", day: "2-digit",
+      hour: "2-digit", minute: "2-digit"
+    });
+  }
+
+  function pipelineStatusLabel(status) {
+    switch (status) {
+      case "OPERATIONAL": return "Operational";
+      case "DEGRADED": return "Degraded";
+      case "STALE": return "Stale";
+      case "ERROR": return "Error";
+      default: return "Unknown";
+    }
+  }
+
+  function renderSummary(doc) {
+    var u = doc.universe || {};
+    setText("valCompliant", fmtNum(u.confirmed_compliant));
+    setText("valReady", fmtNum(u.ready));
+    setText("valInsufficient", fmtNum(u.insufficient_history));
+    setText("valUnavailable", fmtNum(u.data_unavailable));
+
+    setText("covIncluded", fmtNum(u.included_in_rolling));
+    setText("covRows", fmtNum(u.rolling_rows));
+    setText("covBars", fmtNum(u.minimum_ready_bars) + " / " + fmtNum(u.rolling_bars_target));
+
+    var pct = null;
+    if (isFiniteNonNegative(u.ready) && isFiniteNonNegative(u.confirmed_compliant) && u.confirmed_compliant > 0) {
+      pct = Math.round((u.ready / u.confirmed_compliant) * 1000) / 10;
+    }
+    setText("covPct", pct === null ? "\u2014" : pct + "%");
+    var fill = document.getElementById("covProgress");
+    fill.style.width = (pct === null ? 0 : Math.min(pct, 100)) + "%";
+
+    var c = doc.changes || {};
+    setText("chAdded", fmtNum(c.added_count));
+    setText("chRemoved", fmtNum(c.removed_count));
+    setText("chTicker", fmtNum(c.ticker_changes_count));
+    setText("chPrev", c.previous_snapshot_date || "\u2014");
+
+    var f = doc.freshness || {};
+    setText("frRefreshed", fmtNum(f.post_earnings_refreshed));
+    setText("frAwaiting", fmtNum(f.awaiting_next_earnings));
+    setText("frStale", fmtNum(f.potentially_stale));
+    setText("frUnknown", fmtNum(f.unknown));
+  }
+
+  function renderHeader(doc) {
+    setText("snapshotDate", doc.snapshot_date || "\u2014");
+    setText("generatedAt", fmtDateTime(doc.generated_at));
+    var status = doc.pipeline_status || "UNKNOWN";
+    els.pipelinePill.className = "status-pill status-" + status;
+    els.pipelineLabel.textContent = pipelineStatusLabel(status);
+  }
+
+  var currentQueue = [];
+
+  function renderQueueRows(rows) {
+    els.queueBody.replaceChildren();
+    if (rows.length === 0) {
+      els.queueEmpty.style.display = "";
+    } else {
+      els.queueEmpty.style.display = "none";
+    }
+    rows.forEach(function (rec) {
+      var tr = document.createElement("tr");
+
+      var tdTicker = document.createElement("td");
+      tdTicker.className = "ticker";
+      tdTicker.textContent = rec.ticker || "\u2014";
+      tr.appendChild(tdTicker);
+
+      var tdSec = document.createElement("td");
+      tdSec.className = "security-id";
+      tdSec.textContent = rec.security_id || "\u2014";
+      tr.appendChild(tdSec);
+
+      var tdCat = document.createElement("td");
+      var tag = document.createElement("span");
+      tag.className = "cat-tag cat-" + (rec.category || "UNKNOWN");
+      tag.textContent = rec.category || "UNKNOWN";
+      tdCat.appendChild(tag);
+      tr.appendChild(tdCat);
+
+      var tdReason = document.createElement("td");
+      tdReason.textContent = rec.reason || "\u2014";
+      tr.appendChild(tdReason);
+
+      var tdScreen = document.createElement("td");
+      tdScreen.textContent = rec.screening_updated_at || "\u2014";
+      tr.appendChild(tdScreen);
+
+      var tdEarn = document.createElement("td");
+      tdEarn.textContent = rec.recorded_earnings_date || "\u2014";
+      tr.appendChild(tdEarn);
+
+      var tdMarket = document.createElement("td");
+      tdMarket.textContent = rec.last_market_date || "\u2014";
+      tr.appendChild(tdMarket);
+
+      els.queueBody.appendChild(tr);
+    });
+    setText("queueCount", rows.length + (rows.length === 1 ? " record" : " records"));
+  }
+
+  function applyQueueFilters() {
+    var term = (els.queueSearch.value || "").trim().toLowerCase();
+    var cat = els.queueFilter.value;
+    var rows = currentQueue.filter(function (rec) {
+      var matchesTerm = !term ||
+        (rec.ticker || "").toLowerCase().indexOf(term) !== -1 ||
+        (rec.security_id || "").toLowerCase().indexOf(term) !== -1;
+      var matchesCat = !cat || rec.category === cat;
+      return matchesTerm && matchesCat;
+    });
+    renderQueueRows(rows);
+  }
+
+  function renderQueue(doc) {
+    currentQueue = Array.isArray(doc.review_queue) ? doc.review_queue : [];
+    applyQueueFilters();
+  }
+
+  function renderAll(doc) {
+    renderHeader(doc);
+    renderSummary(doc);
+    renderQueue(doc);
+    els.loading.style.display = "none";
+    els.error.style.display = "none";
+    els.content.style.display = "";
+  }
+
+  function showLoading() {
+    if (!lastGoodDoc) {
+      els.loading.style.display = "";
+      els.error.style.display = "none";
+      els.content.style.display = "none";
+    }
+  }
+
+  function showHardError(message) {
+    els.loading.style.display = "none";
+    els.content.style.display = "none";
+    els.error.style.display = "";
+    els.errorDetail.textContent = message;
+    announce("Failed to load pipeline status.");
+  }
+
+  function showStaleBanner(show) {
+    if (show) {
+      els.staleBanner.classList.add("show");
+    } else {
+      els.staleBanner.classList.remove("show");
+    }
+  }
+
+  function fetchStatus() {
+    showLoading();
+    els.refreshBtn.disabled = true;
+
+    return fetch(STATUS_URL, {
+      method: "GET",
+      cache: "no-store",
+      headers: { "Accept": "application/json" }
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Server returned HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (json) {
+        var doc = validateDoc(json);
+        lastGoodDoc = doc;
+        showStaleBanner(false);
+        renderAll(doc);
+        announce("Pipeline status updated.");
+      })
+      .catch(function (err) {
+        if (lastGoodDoc) {
+          showStaleBanner(true);
+          renderAll(lastGoodDoc);
+          announce("Could not refresh. Showing last known data.");
+        } else {
+          showHardError(err.message || "Unknown error");
+        }
+      })
+      .finally(function () {
+        els.refreshBtn.disabled = false;
+      });
+  }
+
+  els.refreshBtn.addEventListener("click", fetchStatus);
+  els.retryBtn.addEventListener("click", fetchStatus);
+  els.queueSearch.addEventListener("input", applyQueueFilters);
+  els.queueFilter.addEventListener("change", applyQueueFilters);
+  els.queueReset.addEventListener("click", function () {
+    els.queueSearch.value = "";
+    els.queueFilter.value = "";
+    applyQueueFilters();
+  });
+
+  fetchStatus();
+})();
+</script>
+
+</body>
+</html>

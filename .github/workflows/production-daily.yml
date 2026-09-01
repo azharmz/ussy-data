@@ -57,3 +57,6 @@ jobs:
             --minimum-ready-bars 250 \
             --request-delay "${REQUEST_DELAY}"
 
+      - name: Publish read-only web status
+        run: python src/publish_web_status.py
+
