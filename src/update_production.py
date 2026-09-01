@@ -21,7 +21,7 @@ LOG = logging.getLogger("update_production")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Update daily and rolling production OHLCV")
-    parser.add_argument("--snapshot-date", required=True)
+    parser.add_argument("--snapshot-date", default="current")
     parser.add_argument("--rolling-bars", type=int, default=300)
     parser.add_argument("--minimum-ready-bars", type=int, default=250)
     parser.add_argument("--request-delay", type=float, default=2.0)
@@ -104,6 +104,9 @@ def main() -> None:
 
     s3 = make_s3_client()
     bucket = os.environ["R2_BUCKET_NAME"]
+    if args.snapshot_date == "current":
+        pointer = read_json(s3, bucket, "universe/current.json")
+        args.snapshot_date = str(pointer["snapshot_date"])
     membership = read_json(s3, bucket, f"universe/membership/{args.snapshot_date}.json")["records"]
     confirmed = {
         str(row["security_id"]): row
