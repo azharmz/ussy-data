@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       snapshot_date:
-        description: Active Musaffa membership snapshot date (YYYY-MM-DD)
+        description: Active Musaffa membership snapshot date or current
         required: true
-        default: "2026-08-28"
+        default: "current"
       request_delay:
         description: Delay between Yahoo tickers in seconds
         required: true
@@ -48,7 +48,7 @@ jobs:
       - name: Update daily and rolling OHLCV
         shell: bash
         env:
-          SNAPSHOT_DATE: ${{ inputs.snapshot_date || '2026-08-28' }}
+          SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
           REQUEST_DELAY: ${{ inputs.request_delay || '2.0' }}
         run: |
           python src/update_production.py \
