@@ -52,6 +52,9 @@ jobs:
           REQUESTED_DATE: ${{ inputs.snapshot_date || 'latest' }}
         run: python src/update_universe.py --snapshot-date "${REQUESTED_DATE}"
 
+      - name: Audit screening freshness against earnings dates
+        run: python src/audit_screening_freshness.py --snapshot-date "${{ steps.universe.outputs.snapshot_date }}"
+
       - name: Bootstrap ADDED securities
         run: python src/bootstrap_added.py --snapshot-date "${{ steps.universe.outputs.snapshot_date }}" --request-delay 3.0
 
