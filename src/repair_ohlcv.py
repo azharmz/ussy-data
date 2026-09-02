@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bootstrap_ohlcv import load_membership, object_exists
 
 import argparse
 import json
@@ -41,7 +42,9 @@ def main() -> None:
     s3 = make_s3_client()
     queue_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/repair_queue.json"
     queue = json.loads(s3.get_object(Bucket=bucket, Key=queue_key)["Body"].read())
-    records = [row for row in queue.get("records", []) if row.get("category") == "retry_required"][: args.max_records]
+    eligible = {str(row['security_id']): row for row in load_membership(s3, bucket, args.snapshot_date)}
+    records = [eligible[str(row['security_id'])] for row in queue.get("records", [])
+               if row.get("category") == "retry_required" and str(row['security_id']) in eligible][: args.max_records]
     if not records:
         LOG.info("No retry_required records found")
         return
@@ -52,6 +55,9 @@ def main() -> None:
         ticker = str(record["ticker"])
         symbol = yahoo_symbol(ticker)
         key = f"backtest/ohlcv/{security_id}.parquet"
+        if object_exists(s3, bucket, key):
+            results.append(Result(security_id, ticker, symbol, 'existing', object_key=key))
+            continue
         if position and args.request_delay:
             delay = args.request_delay + random.uniform(0, 1)
             LOG.info("Rate-limit delay: %.2fs", delay)
@@ -82,6 +88,7 @@ def main() -> None:
         "created_at": datetime.now(UTC).isoformat(),
         "snapshot_date": args.snapshot_date,
         "summary": {
+            "existing": sum(row.status == "existing" for row in results),
             "repaired": sum(row.status == "repaired" for row in results),
             "still_unavailable": sum(row.status == "still_unavailable" for row in results),
         },

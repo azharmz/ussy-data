@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bootstrap_ohlcv import load_membership
 
 import argparse
 import json
@@ -39,7 +40,11 @@ def main() -> None:
     change_key = f"universe/changes/{args.snapshot_date}.json"
     change = json.loads(s3.get_object(Bucket=bucket, Key=change_key)["Body"].read())
     results = []
+    eligible = {str(row['security_id']): row for row in load_membership(s3, bucket, args.snapshot_date)}
     for position, record in enumerate(change.get("added", [])):
+        if str(record['security_id']) not in eligible:
+            continue
+        record = eligible[str(record['security_id'])]
         security_id = str(record["security_id"])
         ticker = str(record["ticker"])
         key = f"backtest/ohlcv/{security_id}.parquet"

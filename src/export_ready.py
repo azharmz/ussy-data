@@ -3,6 +3,7 @@
 Membership and original OHLCV remain untouched. No Yahoo downloads.
 """
 from __future__ import annotations
+from compliance import is_eligible
 import hashlib
 import io
 import json
@@ -18,11 +19,13 @@ def select_ready_ids(readiness, membership, snapshot):
     if not isinstance(records, list) or membership.get("count") != len(records):
         raise ValueError("Invalid membership records/count")
     compliant = {str(row["security_id"]) for row in records
-                 if row.get("sharia_compliance") == "COMPLIANT" and row.get("musaffaHalalRating") == "COMPLIANT"}
+                 if is_eligible(row)}
     ids = readiness.get("ready_security_ids")
     if not isinstance(ids, list) or not all(isinstance(s, str) and s for s in ids):
         raise ValueError("Invalid ready_security_ids")
     selected = set(ids)
+    if readiness.get('confirmed_compliant') != len(compliant):
+        raise ValueError('Readiness eligibility count is stale; rebuild rolling first')
     if not selected or len(selected) != len(ids) or len(selected) != readiness.get("ready"):
         raise ValueError("Empty, duplicate, or inconsistent ready IDs")
     if not selected.issubset(compliant):

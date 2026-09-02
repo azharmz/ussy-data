@@ -4,6 +4,7 @@ This is not a live earnings feed. Generic update timestamps are not evidence
 that Musaffa screened the most recent financial report.
 """
 from __future__ import annotations
+from compliance import is_eligible
 import argparse
 import json
 import os
@@ -67,8 +68,7 @@ def build_report(membership: dict[str, Any], master: dict[str, Any], snapshot: s
     members = records_from(membership, snapshot, "membership")
     sources = records_from(master, snapshot, "security_master")
     source_by_id = {str(row["security_id"]): row for row in sources}
-    confirmed = [row for row in members if row.get("sharia_compliance") == "COMPLIANT"
-                 and row.get("musaffaHalalRating") == "COMPLIANT"]
+    confirmed = [row for row in members if is_eligible(row)]
     records = []
     for member in sorted(confirmed, key=lambda row: str(row["security_id"])):
         security_id = str(member["security_id"])

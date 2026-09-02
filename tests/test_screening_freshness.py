@@ -44,7 +44,7 @@ class FreshnessTests(unittest.TestCase):
         membership, master = self.fixtures()
         original = copy.deepcopy(membership)
         report = build_report(membership, master, "2026-08-28", datetime(2026, 9, 2, tzinfo=UTC))
-        self.assertEqual(report["securities_audited"], 1)
+        self.assertEqual(report["securities_audited"], 2)
         self.assertEqual(report["potentially_stale"], 1)
         self.assertEqual(report["post_earnings_refreshed"], 0)
         self.assertIsNone(report["records"][0]["screening_updated_at"])
@@ -54,7 +54,7 @@ class FreshnessTests(unittest.TestCase):
         membership, master = self.fixtures()
         master.update(count=0, records=[])
         report = build_report(membership, master, "2026-08-28", datetime(2026, 9, 2, tzinfo=UTC))
-        self.assertEqual(report["unknown"], 1)
+        self.assertEqual(report["unknown"], 2)
 
     def test_snapshot_mismatch_rejected(self):
         membership, master = self.fixtures()

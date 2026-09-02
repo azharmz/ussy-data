@@ -1,4 +1,5 @@
 from __future__ import annotations
+from compliance import is_eligible
 
 import argparse
 import json
@@ -56,8 +57,7 @@ def main() -> None:
     confirmed = {
         str(row["security_id"]): row
         for row in membership
-        if row.get("sharia_compliance") == "COMPLIANT"
-        and row.get("musaffaHalalRating") == "COMPLIANT"
+        if is_eligible(row)
     }
 
     parquet_keys = list_keys(s3, bucket, "backtest/ohlcv/")

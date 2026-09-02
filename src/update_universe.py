@@ -1,4 +1,5 @@
 from __future__ import annotations
+from compliance import is_eligible
 
 import argparse
 import json
@@ -56,8 +57,7 @@ def confirmed(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         for row in records
         if row.get("security_id")
         and row.get("ticker")
-        and row.get("sharia_compliance") == "COMPLIANT"
-        and row.get("musaffaHalalRating") == "COMPLIANT"
+        and is_eligible(row)
     }
 
 

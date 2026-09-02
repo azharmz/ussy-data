@@ -1,4 +1,5 @@
 from __future__ import annotations
+from compliance import is_eligible
 
 import argparse
 import io
@@ -87,8 +88,7 @@ def load_membership(s3, bucket: str, snapshot_date: str) -> list[dict[str, Any]]
     records = [
         record
         for record in records
-        if record.get("sharia_compliance") == "COMPLIANT"
-        and record.get("musaffaHalalRating") == "COMPLIANT"
+        if is_eligible(record)
     ]
     LOG.info(
         "Conservative compliance filter retained %s of %s membership records",

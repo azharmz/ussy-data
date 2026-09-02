@@ -11,7 +11,7 @@ class ReadySelectionTests(unittest.TestCase):
         self.members = {'snapshot_date': '2026-08-28', 'count': 3, 'records': [
             {'security_id': sid, 'sharia_compliance': 'COMPLIANT', 'musaffaHalalRating': 'COMPLIANT'}
             for sid in ['A', 'B', 'C']]}
-        self.ready = {'snapshot_date': '2026-08-28', 'ready': 1, 'ready_security_ids': ['A'],
+        self.ready = {'snapshot_date': '2026-08-28', 'confirmed_compliant': 3, 'ready': 1, 'ready_security_ids': ['A'],
                       'insufficient_history_security_ids': ['B'], 'data_unavailable_security_ids': ['C']}
 
     def select(self):
@@ -31,11 +31,20 @@ class ReadySelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.select()
 
     def test_noncompliant_rejected(self):
-        self.members['records'][0]['musaffaHalalRating'] = 'DOUBTFUL'
+        self.members['records'][0]['sharia_compliance'] = 'DOUBTFUL'
         with self.assertRaises(ValueError): self.select()
 
     def test_duplicates_rejected(self):
         self.ready.update(ready=2, ready_security_ids=['A', 'A'])
+        with self.assertRaises(ValueError): self.select()
+
+    def test_secondary_rating_ignored(self):
+        for value in ('NON_COMPLIANT', 'QUESTIONABLE', None, ''):
+            self.members['records'][0]['musaffaHalalRating'] = value
+            self.assertEqual(self.select(), {'A'})
+
+    def test_stale_policy_readiness_rejected(self):
+        self.ready['confirmed_compliant'] = 2
         with self.assertRaises(ValueError): self.select()
 
     def test_overlap_rejected(self):
