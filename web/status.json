@@ -23,10 +23,11 @@
     "ticker_changes": []
   },
   "freshness": {
-    "post_earnings_refreshed": 0,
-    "awaiting_next_earnings": 0,
-    "potentially_stale": 0,
-    "unknown": 0
+    "available": false,
+    "post_earnings_refreshed": null,
+    "awaiting_next_earnings": null,
+    "potentially_stale": null,
+    "unknown": null
   },
   "review_queue": [
     {

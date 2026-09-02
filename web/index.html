@@ -752,12 +752,14 @@
       .then(function (json) {
         var doc = validateDoc(json);
         lastGoodDoc = doc;
-        showStaleBanner(false);
         renderAll(doc);
+        els.staleBanner.textContent = doc.warning || "";
+        showStaleBanner(Boolean(doc.warning));
         announce("Pipeline status updated.");
       })
       .catch(function (err) {
         if (lastGoodDoc) {
+          els.staleBanner.textContent = "Data temporarily unavailable — showing the last data that loaded successfully.";
           showStaleBanner(true);
           renderAll(lastGoodDoc);
           announce("Could not refresh. Showing last known data.");

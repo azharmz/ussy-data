@@ -8,6 +8,7 @@ import os
 import random
 import time
 from datetime import UTC, datetime, timedelta
+from itertools import batched
 from typing import Any
 
 import pandas as pd
@@ -24,7 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--snapshot-date", default="current")
     parser.add_argument("--rolling-bars", type=int, default=300)
     parser.add_argument("--minimum-ready-bars", type=int, default=250)
-    parser.add_argument("--request-delay", type=float, default=2.0)
+    parser.add_argument("--batch-size", type=int, default=10)
+    parser.add_argument("--request-delay", type=float, default=10.0)
     parser.add_argument("--max-retries", type=int, default=3)
     return parser.parse_args()
 
@@ -56,7 +58,7 @@ def write_parquet(s3, bucket: str, key: str, frame: pd.DataFrame) -> int:
 
 def download_since(symbol: str, start_date: pd.Timestamp, max_retries: int) -> pd.DataFrame:
     last_error: Exception | None = None
-    start = (start_date - pd.Timedelta(days=7)).date().isoformat()
+    start = (start_date.date() - timedelta(days=7)).isoformat()
     end = (datetime.now(UTC).date() + timedelta(days=1)).isoformat()
     for attempt in range(1, max_retries + 1):
         try:
@@ -84,6 +86,38 @@ def download_since(symbol: str, start_date: pd.Timestamp, max_retries: int) -> p
     raise RuntimeError(f"download failed after {max_retries} attempts: {last_error}")
 
 
+def download_batch(symbols: list[str], start_date: pd.Timestamp) -> pd.DataFrame:
+    """Download a controlled group of symbols from one common lookback date."""
+    start = (start_date.date() - timedelta(days=7)).isoformat()
+    end = (datetime.now(UTC).date() + timedelta(days=1)).isoformat()
+    return yf.download(
+        symbols,
+        start=start,
+        end=end,
+        interval="1d",
+        auto_adjust=False,
+        actions=False,
+        progress=False,
+        group_by="ticker",
+        threads=False,
+        timeout=30,
+    )
+
+
+def extract_symbol(frame: pd.DataFrame, symbol: str, symbol_count: int) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame()
+    if not isinstance(frame.columns, pd.MultiIndex):
+        return frame.copy() if symbol_count == 1 else pd.DataFrame()
+    level_zero = frame.columns.get_level_values(0)
+    if symbol in level_zero:
+        return frame[symbol].dropna(how="all")
+    level_one = frame.columns.get_level_values(1)
+    if symbol in level_one:
+        return frame.xs(symbol, axis=1, level=1).dropna(how="all")
+    return pd.DataFrame()
+
+
 def normalize_existing(frame: pd.DataFrame, security_id: str, ticker: str) -> pd.DataFrame:
     missing = set(OHLCV_COLUMNS) - set(frame.columns)
     if missing:
@@ -99,8 +133,10 @@ def main() -> None:
     args = parse_args()
     if not 1 <= args.minimum_ready_bars <= args.rolling_bars:
         raise ValueError("minimum-ready-bars must be between 1 and rolling-bars")
-    if not 0 <= args.request_delay <= 10:
-        raise ValueError("request-delay must be between 0 and 10 seconds")
+    if not 1 <= args.batch_size <= 25:
+        raise ValueError("batch-size must be between 1 and 25")
+    if not 0 <= args.request_delay <= 60:
+        raise ValueError("request-delay must be between 0 and 60 seconds")
 
     s3 = make_s3_client()
     bucket = os.environ["R2_BUCKET_NAME"]
@@ -128,60 +164,84 @@ def main() -> None:
     failures: list[dict[str, str]] = []
     updated_histories = 0
 
-    for position, security_id in enumerate(operational_ids):
+    histories: dict[str, pd.DataFrame] = {}
+    candidates: list[tuple[str, str, str, pd.Timestamp]] = []
+    for security_id in operational_ids:
         record = confirmed[security_id]
         ticker = str(record["ticker"])
+        symbol = yahoo_symbol(ticker)
         key = f"backtest/ohlcv/{security_id}.parquet"
-        historical: pd.DataFrame | None = None
         try:
             historical = normalize_existing(read_parquet(s3, bucket, key), security_id, ticker)
             if historical.empty:
                 raise ValueError("Historical Parquet is empty")
-            last_date = historical["date"].iloc[-1]
-            if position and args.request_delay:
-                time.sleep(args.request_delay + random.uniform(0, min(0.5, args.request_delay / 4)))
-            downloaded_raw = download_since(yahoo_symbol(ticker), last_date, args.max_retries)
-            if downloaded_raw.empty:
-                downloaded = historical.iloc[0:0].copy()
-            else:
-                downloaded = normalize_history(downloaded_raw, security_id, ticker)
-            additions = downloaded[downloaded["date"] > last_date].copy()
-            if not additions.empty:
-                merged = pd.concat([historical, downloaded], ignore_index=True)
-                merged = merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
-                write_parquet(s3, bucket, key, merged)
-                historical = merged
-                new_rows.append(additions[OHLCV_COLUMNS])
-                updated_histories += 1
-                LOG.info("Updated %s through %s (+%s bars)", ticker, historical["date"].iloc[-1].date(), len(additions))
-            rolling = historical.tail(args.rolling_bars).copy()
-            rolling_frames.append(rolling)
-            details.append(
-                {
+            histories[security_id] = historical
+            candidates.append((security_id, ticker, symbol, historical["date"].iloc[-1]))
+        except Exception as exc:
+            failures.append({"security_id": security_id, "ticker": ticker, "error": str(exc)[:500]})
+            LOG.error("Failed to load history for %s (%s): %s", ticker, security_id, exc)
+
+    candidate_batches = list(batched(candidates, args.batch_size))
+    for batch_index, batch in enumerate(candidate_batches):
+        if batch_index and args.request_delay:
+            delay = args.request_delay + random.uniform(0, min(1.0, args.request_delay / 10))
+            LOG.info("Rate-limit delay between batches: %.2fs", delay)
+            time.sleep(delay)
+        symbols = [item[2] for item in batch]
+        common_start = min(item[3] for item in batch)
+        LOG.info("Downloading batch %s/%s (%s tickers)", batch_index + 1, len(candidate_batches), len(symbols))
+        try:
+            batch_frame = download_batch(symbols, common_start)
+        except Exception as exc:
+            LOG.warning("Batch download failed; retrying its tickers individually: %s", exc)
+            batch_frame = pd.DataFrame()
+
+        for security_id, ticker, symbol, last_date in batch:
+            historical = histories[security_id]
+            key = f"backtest/ohlcv/{security_id}.parquet"
+            try:
+                downloaded_raw = extract_symbol(batch_frame, symbol, len(symbols))
+                if downloaded_raw.empty:
+                    LOG.warning("No batch rows for %s; retrying individually", symbol)
+                    downloaded_raw = download_since(symbol, last_date, args.max_retries)
+                downloaded = (
+                    historical.iloc[0:0].copy()
+                    if downloaded_raw.empty
+                    else normalize_history(downloaded_raw, security_id, ticker)
+                )
+                additions = downloaded[downloaded["date"] > last_date].copy()
+                if not additions.empty:
+                    merged = pd.concat([historical, downloaded], ignore_index=True)
+                    merged = merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
+                    write_parquet(s3, bucket, key, merged)
+                    historical = merged
+                    histories[security_id] = historical
+                    new_rows.append(additions[OHLCV_COLUMNS])
+                    updated_histories += 1
+                    LOG.info("Updated %s through %s (+%s bars)", ticker, historical["date"].iloc[-1].date(), len(additions))
+                rolling = historical.tail(args.rolling_bars).copy()
+                rolling_frames.append(rolling)
+                details.append({
                     "security_id": security_id,
                     "ticker": ticker,
                     "available_bars": len(historical),
                     "rolling_bars": len(rolling),
                     "last_date": historical["date"].iloc[-1].date().isoformat(),
-                }
-            )
-        except Exception as exc:
-            failures.append({"security_id": security_id, "ticker": ticker, "error": str(exc)[:500]})
-            LOG.error("Failed production update for %s (%s): %s", ticker, security_id, exc)
-            print(f"::warning title=Production OHLCV update failed::{ticker} ({security_id}): {str(exc)[:300]}")
-            if historical is not None and not historical.empty:
+                })
+            except Exception as exc:
+                failures.append({"security_id": security_id, "ticker": ticker, "error": str(exc)[:500]})
+                LOG.error("Failed production update for %s (%s): %s", ticker, security_id, exc)
+                print(f"::warning title=Production OHLCV update failed::{ticker} ({security_id}): {str(exc)[:300]}")
                 rolling = historical.tail(args.rolling_bars).copy()
                 rolling_frames.append(rolling)
-                details.append(
-                    {
-                        "security_id": security_id,
-                        "ticker": ticker,
-                        "available_bars": len(historical),
-                        "rolling_bars": len(rolling),
-                        "last_date": historical["date"].iloc[-1].date().isoformat(),
-                        "update_status": "stale_after_failure",
-                    }
-                )
+                details.append({
+                    "security_id": security_id,
+                    "ticker": ticker,
+                    "available_bars": len(historical),
+                    "rolling_bars": len(rolling),
+                    "last_date": historical["date"].iloc[-1].date().isoformat(),
+                    "update_status": "stale_after_failure",
+                })
 
     failure_rate = len(failures) / len(operational_ids) if operational_ids else 1
     if failure_rate > 0.10:
@@ -234,6 +294,8 @@ def main() -> None:
     report = {
         "created_at": created_at,
         "snapshot_date": args.snapshot_date,
+        "batch_size": args.batch_size,
+        "batch_delay_seconds": args.request_delay,
         "operational_securities": len(operational_ids),
         "updated_histories": updated_histories,
         "daily_outputs": daily_outputs,

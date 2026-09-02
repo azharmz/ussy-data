@@ -70,9 +70,9 @@ def _get_json(client, bucket: str, key: str) -> dict[str, Any]:
         obj = client.get_object(Bucket=bucket, Key=key)
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
-        if code in ("NoSuchKey", "404"):
+        if code in ("NoSuchKey", "404", "NotFound"):
             raise MissingObjectError(f"Required object not found: {key}") from exc
-        raise MissingObjectError(f"Could not read {key}: {exc}") from exc
+        raise RuntimeError(f"Could not read {key}") from exc
     try:
         payload = json.loads(obj["Body"].read())
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -104,12 +104,8 @@ def _extract_active_snapshot_date(current_doc: dict[str, Any]) -> str:
 
 
 def _check_snapshot_consistency(snapshot_date: str,
-                                 freshness_doc: dict[str, Any],
                                  readiness_doc: dict[str, Any]) -> bool:
-    """Returns True if all three sources agree on snapshot_date."""
-    fresh_date = freshness_doc.get("snapshot_date")
-    ready_date = readiness_doc.get("snapshot_date")
-    return fresh_date == snapshot_date and ready_date == snapshot_date
+    return readiness_doc.get("snapshot_date") == snapshot_date
 
 
 # ---------------------------------------------------------------------------
@@ -286,15 +282,25 @@ def _build_review_queue(freshness_doc: dict[str, Any],
     return queue
 
 
+def _empty_freshness_summary() -> dict[str, None | bool]:
+    return {
+        "available": False,
+        "post_earnings_refreshed": None,
+        "awaiting_next_earnings": None,
+        "potentially_stale": None,
+        "unknown": None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Pipeline status
 # ---------------------------------------------------------------------------
 
-def _determine_pipeline_status(freshness: dict[str, int], readiness_doc: dict[str, Any]) -> str:
+def _determine_pipeline_status(freshness: dict[str, Any], readiness_doc: dict[str, Any]) -> str:
     update_failures = readiness_doc.get("update_failures", 0) or 0
     if not isinstance(update_failures, int) or update_failures < 0:
         raise SchemaError("readiness.update_failures must be a non-negative integer when present")
-    if update_failures > 0 or freshness["potentially_stale"] > 0:
+    if update_failures > 0 or (freshness.get("potentially_stale") or 0) > 0:
         return "DEGRADED"
     return "OPERATIONAL"
 
@@ -308,21 +314,29 @@ def build_status_document(client, bucket: str) -> dict[str, Any]:
     snapshot_date = _extract_active_snapshot_date(current_doc)
 
     changes_doc = _get_json(client, bucket, f"universe/changes/{snapshot_date}.json")
-    freshness_doc = _get_json(client, bucket, "universe/freshness/latest.json")
+    freshness_doc = _get_json_optional(client, bucket, "universe/freshness/latest.json")
     readiness_doc = _get_json(client, bucket, "production/rolling/readiness.json")
     membership_doc = _get_json(client, bucket, f"universe/membership/{snapshot_date}.json")
 
-    if not _check_snapshot_consistency(snapshot_date, freshness_doc, readiness_doc):
+    if not _check_snapshot_consistency(snapshot_date, readiness_doc):
         raise SchemaError(
             "Snapshot date mismatch: "
-            f"current={snapshot_date}, freshness={freshness_doc.get('snapshot_date')}, "
-            f"readiness={readiness_doc.get('snapshot_date')}"
+            f"current={snapshot_date}, readiness={readiness_doc.get('snapshot_date')}"
         )
+    if freshness_doc is not None and freshness_doc.get("snapshot_date") != snapshot_date:
+        freshness_doc = None
 
     universe = _extract_universe_counts(readiness_doc)
     changes = _extract_changes(changes_doc, current_doc.get("previous_snapshot_date"))
-    freshness_counts = _extract_freshness_summary(freshness_doc)
-    review_queue = _build_review_queue(freshness_doc, readiness_doc, membership_doc)
+    if freshness_doc is None:
+        freshness_counts = _empty_freshness_summary()
+        review_queue = _readiness_review_records(
+            readiness_doc, _build_ticker_lookup(membership_doc)
+        )
+        review_queue.sort(key=lambda r: (r["category"], r.get("ticker") or "", r.get("security_id") or ""))
+    else:
+        freshness_counts = {"available": True, **_extract_freshness_summary(freshness_doc)}
+        review_queue = _build_review_queue(freshness_doc, readiness_doc, membership_doc)
     pipeline_status = _determine_pipeline_status(freshness_counts, readiness_doc)
 
     doc = {
@@ -335,6 +349,8 @@ def build_status_document(client, bucket: str) -> dict[str, Any]:
         "freshness": freshness_counts,
         "review_queue": review_queue,
     }
+    if freshness_doc is None:
+        doc["warning"] = "Screening freshness audit is not available for the active snapshot"
     return doc
 
 
@@ -357,6 +373,7 @@ def build_error_document(message: str) -> dict[str, Any]:
             "added": [], "removed": [], "ticker_changes": [],
         },
         "freshness": {
+            "available": False,
             "post_earnings_refreshed": None, "awaiting_next_earnings": None,
             "potentially_stale": None, "unknown": None,
         },
