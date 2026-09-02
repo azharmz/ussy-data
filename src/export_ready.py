@@ -56,6 +56,8 @@ def filter_rolling(frame, readiness, selected):
     for sid in selected:
         if sid not in details or counts[sid] != details[sid]["rolling_bars"] or dates[sid].date().isoformat() != details[sid]["last_date"]:
             raise ValueError("Rolling data and readiness details disagree")
+    from ohlcv_qc import validate_frame
+    validate_frame(result)
     return result.sort_values(["security_id", "date"]).reset_index(drop=True)
 
 

@@ -176,6 +176,8 @@ def normalize_history(frame: pd.DataFrame, security_id: str, ticker: str) -> pd.
         raise ValueError("Negative OHLC price detected")
     if (normalized["high"] < normalized["low"]).any():
         raise ValueError("High price below low price detected")
+    from ohlcv_qc import validate_frame
+    validate_frame(normalized)
     return normalized
 
 
