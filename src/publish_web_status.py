@@ -438,22 +438,18 @@ def main() -> int:
     if not args.local_only:
         try:
             client.put_object(
-                Bucket=bucket,
-                Key="web/status.json",
+                Bucket="ussy-data-web",
+                Key="status.json",
                 Body=json.dumps(doc, indent=2).encode("utf-8"),
                 ContentType="application/json; charset=utf-8",
                 CacheControl="public, max-age=60",
             )
-            index_path = WEB_DIR / "index.html"
-            client.put_object(
-                Bucket=bucket,
-                Key="web/index.html",
-                Body=index_path.read_bytes(),
-                ContentType="text/html; charset=utf-8",
-                CacheControl="public, max-age=300",
+            print("Published: ussy-data-web/status.json")
+        except ClientError:
+            print(
+                "ERROR: failed to publish status.json to ussy-data-web",
+                file=sys.stderr,
             )
-        except (ClientError, OSError) as exc:
-            print(f"ERROR: failed to upload web/status.json: {exc}", file=sys.stderr)
             return 1
 
     _print_summary(doc)
