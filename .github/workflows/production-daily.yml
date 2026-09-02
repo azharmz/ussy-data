@@ -63,6 +63,12 @@ jobs:
             --batch-size "${BATCH_SIZE}" \
             --request-delay "${REQUEST_DELAY}"
 
+      - name: Export ready-only strategy data
+        run: python src/export_ready.py
+
+      - name: Audit recorded earnings freshness for active compliant universe
+        run: python src/audit_screening_freshness.py --snapshot-date current
+
       - name: Publish read-only web status
         run: python src/publish_web_status.py
 

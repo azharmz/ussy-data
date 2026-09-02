@@ -336,6 +336,13 @@ def build_status_document(client, bucket: str) -> dict[str, Any]:
         review_queue.sort(key=lambda r: (r["category"], r.get("ticker") or "", r.get("security_id") or ""))
     else:
         freshness_counts = {"available": True, **_extract_freshness_summary(freshness_doc)}
+        if freshness_doc.get("method") == "recorded_earnings_date_review_only_v2":
+            if freshness_doc.get("securities_audited") != universe["confirmed_compliant"]:
+                raise SchemaError("Freshness scope differs from confirmed-compliant universe")
+            if sum(freshness_counts[key] for key in ("post_earnings_refreshed", "awaiting_next_earnings", "potentially_stale", "unknown")) != universe["confirmed_compliant"]:
+                raise SchemaError("Freshness counts do not cover the compliant universe")
+        freshness_counts["created_at"] = freshness_doc.get("created_at")
+        freshness_counts["live_earnings_verified"] = freshness_doc.get("live_earnings_verified", False)
         review_queue = _build_review_queue(freshness_doc, readiness_doc, membership_doc)
     pipeline_status = _determine_pipeline_status(freshness_counts, readiness_doc)
 
@@ -351,6 +358,8 @@ def build_status_document(client, bucket: str) -> dict[str, Any]:
     }
     if freshness_doc is None:
         doc["warning"] = "Screening freshness audit is not available for the active snapshot"
+    elif freshness_doc.get("disclaimer"):
+        doc["warning"] = freshness_doc["disclaimer"]
     return doc
 
 

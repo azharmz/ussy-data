@@ -65,3 +65,6 @@ jobs:
             --rolling-bars 300 \
             --minimum-ready-bars 250
 
+      - name: Export ready-only strategy data
+        run: python src/export_ready.py
+
