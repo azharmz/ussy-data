@@ -8,13 +8,15 @@ from provider_symbols import yahoo_symbol, YAHOO_ALIASES
 
 
 class ProviderSymbolTests(unittest.TestCase):
-    def test_four_reviewed_aliases(self):
-        self.assertEqual(len(YAHOO_ALIASES), 4)
+    def test_reviewed_aliases(self):
+        self.assertEqual(len(YAHOO_ALIASES), 5)
         for (sid, ticker), target in YAHOO_ALIASES.items():
             self.assertEqual(yahoo_symbol(ticker, sid), target)
             self.assertEqual(yahoo_symbol(target, sid), target)
 
     def test_wrong_id_does_not_remap(self):
+        self.assertEqual(yahoo_symbol('MBGL WI', 'US60744M1062'), 'MBGL')
+        self.assertEqual(yahoo_symbol('MBGL WI', 'wrong-id'), 'MBGL WI')
         self.assertEqual(yahoo_symbol('PSTG', 'different-security'), 'PSTG')
         self.assertEqual(yahoo_symbol('PSTG'), 'PSTG')
 

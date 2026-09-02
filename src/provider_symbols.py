@@ -2,6 +2,7 @@
 
 # Keyed by BOTH source security ID and ticker to prevent reused-ticker collisions.
 YAHOO_ALIASES = {
+    ('US60744M1062', 'MBGL WI'): 'MBGL',
     ('US20459V1052', 'CMPO'): 'GPGI',
     ('US74624M1027', 'PSTG'): 'P',
     ('US8248891090', 'SCVL'): 'SHOE',

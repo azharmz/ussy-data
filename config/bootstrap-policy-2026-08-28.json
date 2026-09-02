@@ -1,6 +1,10 @@
 {
   "candidates": [
     {
+      "security_id": "US60744M1062",
+      "ticker": "MBGL WI"
+    },
+    {
       "security_id": "US20459V1052",
       "ticker": "CMPO"
     },
@@ -689,10 +693,6 @@
       "ticker": "MOBI"
     },
     {
-      "security_id": "US60744M1062",
-      "ticker": "MBGL WI"
-    },
-    {
       "security_id": "US6294452064",
       "ticker": "NVEC"
     },
@@ -715,14 +715,6 @@
     {
       "security_id": "US66979P3001",
       "ticker": "XMAX"
-    },
-    {
-      "security_id": "US66987P5089",
-      "ticker": "NBY"
-    },
-    {
-      "security_id": "US67073S4066",
-      "ticker": "IMG"
     },
     {
       "security_id": "US6745991058",
@@ -823,10 +815,6 @@
     {
       "security_id": "US81517B1017",
       "ticker": "SECZ"
-    },
-    {
-      "security_id": "US8342033094",
-      "ticker": "SLNO"
     },
     {
       "security_id": "US8485603067",
@@ -947,10 +935,6 @@
     {
       "security_id": "VGG244981186",
       "ticker": "ARCL"
-    },
-    {
-      "security_id": "VGG5146R1073",
-      "ticker": "JMG"
     },
     {
       "security_id": "VGG6375R1073",
@@ -1143,7 +1127,40 @@
       "event_date": "2026-03-26",
       "detail": "Reorganisasi Chapter 11; jangan retry sebagai saham lama aktif.",
       "source": "https://www.sec.gov/Archives/edgar/data/846475/000110465926035292/zyxi-20260326x1512g.htm"
+    },
+    {
+      "security_id": "US66987P5089",
+      "ticker": "NBY",
+      "reason": "identity_and_screening_review",
+      "detail": "NBY announced SDEV with a material business shift into digital assets. Preserve source compliance; do not auto-remap pending review.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1389545/000143774926009301/ex_935701.htm",
+      "reviewed_at": "2026-09-02"
+    },
+    {
+      "security_id": "US67073S4066",
+      "ticker": "IMG",
+      "reason": "delisted_otc",
+      "detail": "Nasdaq trading suspended 2026-03-06; OTC symbol CIMG. No automatic venue migration.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1527613/000149315226009365/form8-k.htm",
+      "reviewed_at": "2026-09-02"
+    },
+    {
+      "security_id": "US8342033094",
+      "ticker": "SLNO",
+      "reason": "acquisition_completed",
+      "detail": "Neurocrine acquisition completed 2026-05-18.",
+      "source": "https://neurocrine.gcs-web.com/news-releases/news-release-details/neurocrine-biosciences-completes-acquisition-soleno-therapeutics",
+      "reviewed_at": "2026-09-02"
+    },
+    {
+      "security_id": "VGG5146R1073",
+      "ticker": "JMG",
+      "reason": "halt_delisting_proceedings",
+      "detail": "Halted since 2026-01-15; NYSE announced delisting proceedings 2026-06-12.",
+      "source": "https://www.morningstar.com/news/business-wire/20260612158356/nyse-american-to-commence-delisting-proceedings-against-jm-group-limited-jmg",
+      "reviewed_at": "2026-09-02"
     }
   ],
-  "note": "235 original candidates plus four reviewed provider-ticker repairs. Deferred 23 are operational exceptions, not compliance exclusions; see docs/27-ticker-review-2026-09-02.md. ESGL is NOT aliased to existing OIO."
+  "note": "235 retry-eligible candidates including MBGL WI→MBGL. Prior run uploaded 234; always recheck R2 and skip existing histories. 27 deferred are operational/review cases, NOT changes to compliance.",
+  "followup_audit": "universe/policy_audits/2026-08-28/33617309210-1.json"
 }

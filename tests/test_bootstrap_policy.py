@@ -35,7 +35,10 @@ class PolicyQueueTests(unittest.TestCase):
 
     def test_reviewed_plan_counts(self):
         plan = json.loads((ROOT / 'config/bootstrap-policy-2026-08-28.json').read_text())
-        self.assertEqual(len(plan['candidates']), 239)
-        self.assertEqual(len(plan['deferred']), 23)
+        self.assertEqual(len(plan['candidates']), 235)
+        self.assertEqual(len(plan['deferred']), 27)
+        self.assertEqual(plan['candidates'][0]['ticker'], 'MBGL WI')
+        deferred = {row['ticker'] for row in plan['deferred']}
+        self.assertTrue({'NBY', 'IMG', 'SLNO', 'JMG'}.issubset(deferred))
         ids = [r['security_id'] for r in plan['candidates'] + plan['deferred']]
         self.assertEqual(len(set(ids)), 262)
