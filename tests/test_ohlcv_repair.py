@@ -1,4 +1,6 @@
 import csv
+import copy
+import json
 import importlib.util
 import sys
 import unittest
@@ -7,7 +9,39 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from ohlcv_qc import issues, validate_frame
-from repair_reported_bars import replace_bad_rows
+from repair_reported_bars import replace_bad_rows, load_cached, daily_targets, NEW_IDS
+
+
+class CacheTests(unittest.TestCase):
+    def setUp(self):
+        self.cached = json.loads((ROOT / 'audits/2026-09-01-cached-fetches.json').read_text())
+        with (ROOT / 'audits/2026-09-01-invalid-bars.csv').open() as stream:
+            self.targets = list(csv.DictReader(stream))
+
+    def test_exactly_34_reused_and_three_new(self):
+        before = copy.deepcopy(self.cached)
+        reused = load_cached(self.cached, self.targets)
+        self.assertEqual(len(reused), 34)
+        self.assertEqual({r['security_id'] for r in self.targets} - set(reused), NEW_IDS)
+        self.assertEqual(before, self.cached)
+
+    def test_missing_cache_fails_without_fallback(self):
+        self.cached['fetches'].pop()
+        with self.assertRaises(ValueError): load_cached(self.cached, self.targets)
+
+    def test_duplicate_rejected(self):
+        self.cached['fetches'][-1] = self.cached['fetches'][0]
+        with self.assertRaises(ValueError): load_cached(self.cached, self.targets)
+
+    def test_wrong_date_or_price_rejected(self):
+        for key, value in [('date', '2026-09-02 00:00:00'), ('high', 0), ('security_id', 'OTHER')]:
+            cached = copy.deepcopy(self.cached)
+            cached['fetches'][0]['replacement'][key] = value
+            with self.assertRaises(ValueError): load_cached(cached, self.targets)
+
+    def test_adjustment_parameters_rejected(self):
+        self.cached['fetches'][0]['parameters']['auto_adjust'] = True
+        with self.assertRaises(ValueError): load_cached(self.cached, self.targets)
 
 
 class QCTests(unittest.TestCase):
@@ -31,8 +65,8 @@ class QCTests(unittest.TestCase):
     def test_scope_and_all_reported_invalid(self):
         with (ROOT / 'audits/2026-09-01-invalid-bars.csv').open() as stream:
             rows = list(csv.DictReader(stream))
-        self.assertEqual(len(rows), 34)
-        self.assertEqual(len({r['security_id'] for r in rows}), 34)
+        self.assertEqual(len(rows), 37)
+        self.assertEqual(len({r['security_id'] for r in rows}), 37)
         self.assertEqual({r['date'] for r in rows}, {'2026-09-01'})
         self.assertTrue(all(issues(row) for row in rows))
 
@@ -87,3 +121,11 @@ class FrameTests(unittest.TestCase):
                          securities=[dict(security_id='A', rolling_bars=2, last_date='2026-09-01')])
         with self.assertRaisesRegex(ValueError, 'OHLCV QC'):
             filter_rolling(self.frame, readiness, {'A'})
+
+    def test_daily_missing_target_not_inserted(self):
+        targets = [self.bad, dict(self.bad, security_id='MISSING')]
+        scoped = daily_targets(self.frame, targets)
+        self.assertEqual(scoped, [self.bad])
+        result, changed = replace_bad_rows(self.frame, scoped, {'A': self.good})
+        self.assertEqual(len(result), len(self.frame))
+        self.assertEqual(changed, ['A'])
