@@ -53,7 +53,7 @@ def main() -> None:
     for position, record in enumerate(records):
         security_id = str(record["security_id"])
         ticker = str(record["ticker"])
-        symbol = yahoo_symbol(ticker)
+        symbol = yahoo_symbol(ticker, security_id)
         key = f"backtest/ohlcv/{security_id}.parquet"
         if object_exists(s3, bucket, key):
             results.append(Result(security_id, ticker, symbol, 'existing', object_key=key))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from compliance import is_eligible
+from provider_symbols import yahoo_symbol
 
 import argparse
 import io
@@ -97,11 +98,6 @@ def load_membership(s3, bucket: str, snapshot_date: str) -> list[dict[str, Any]]
     )
     records.sort(key=lambda row: (str(row["security_id"]), str(row["ticker"])))
     return records
-
-
-def yahoo_symbol(ticker: str) -> str:
-    # Yahoo uses a dash for US class shares such as BRK.B -> BRK-B.
-    return ticker.strip().upper().replace(".", "-")
 
 
 def object_exists(s3, bucket: str, key: str) -> bool:
@@ -206,7 +202,7 @@ def run(args: argparse.Namespace) -> int:
     for position, record in enumerate(selected):
         security_id = str(record["security_id"])
         ticker = str(record["ticker"])
-        symbol = yahoo_symbol(ticker)
+        symbol = yahoo_symbol(ticker, security_id)
         key = f"backtest/ohlcv/{security_id}.parquet"
         if not args.force and object_exists(s3, bucket, key):
             LOG.info("Skipping existing object %s", key)

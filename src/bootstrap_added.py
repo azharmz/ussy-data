@@ -54,7 +54,7 @@ def main() -> None:
         if position and args.request_delay:
             time.sleep(args.request_delay + random.uniform(0, 0.5))
         try:
-            history = normalize_history(download_history(yahoo_symbol(ticker), 3), security_id, ticker)
+            history = normalize_history(download_history(yahoo_symbol(ticker, security_id), 3), security_id, ticker)
             upload_parquet(s3, bucket, key, history)
             results.append({"security_id": security_id, "ticker": ticker, "status": "uploaded", "rows": len(history)})
             LOG.info("Bootstrapped ADDED security %s (%s rows)", ticker, len(history))

@@ -169,7 +169,7 @@ def main() -> None:
     for security_id in operational_ids:
         record = confirmed[security_id]
         ticker = str(record["ticker"])
-        symbol = yahoo_symbol(ticker)
+        symbol = yahoo_symbol(ticker, security_id)
         key = f"backtest/ohlcv/{security_id}.parquet"
         try:
             historical = normalize_existing(read_parquet(s3, bucket, key), security_id, ticker)

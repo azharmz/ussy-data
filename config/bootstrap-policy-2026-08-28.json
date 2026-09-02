@@ -1,0 +1,1149 @@
+{
+  "candidates": [
+    {
+      "security_id": "US20459V1052",
+      "ticker": "CMPO"
+    },
+    {
+      "security_id": "US74624M1027",
+      "ticker": "PSTG"
+    },
+    {
+      "security_id": "US8248891090",
+      "ticker": "SCVL"
+    },
+    {
+      "security_id": "US9118053076",
+      "ticker": "USEG"
+    },
+    {
+      "security_id": "CA39525U1075",
+      "ticker": "GFR"
+    },
+    {
+      "security_id": "CA4339211035",
+      "ticker": "HIVE"
+    },
+    {
+      "security_id": "CA4530384086",
+      "ticker": "IMO"
+    },
+    {
+      "security_id": "CA53044R8672",
+      "ticker": "DETX"
+    },
+    {
+      "security_id": "CA55293N1096",
+      "ticker": "MDA"
+    },
+    {
+      "security_id": "CA80100R4089",
+      "ticker": "SANG"
+    },
+    {
+      "security_id": "CA81728N1006",
+      "ticker": "SNT"
+    },
+    {
+      "security_id": "CA82509L1076",
+      "ticker": "SHOP"
+    },
+    {
+      "security_id": "CA84841L5062",
+      "ticker": "ANY"
+    },
+    {
+      "security_id": "CA88831L2021",
+      "ticker": "TII"
+    },
+    {
+      "security_id": "CA98390R1029",
+      "ticker": "XNDU"
+    },
+    {
+      "security_id": "CH1125843347",
+      "ticker": "SOPH"
+    },
+    {
+      "security_id": "DK0010272202",
+      "ticker": "GMAB"
+    },
+    {
+      "security_id": "DK0060615755",
+      "ticker": "ASND"
+    },
+    {
+      "security_id": "FR0011341205",
+      "ticker": "NBTX"
+    },
+    {
+      "security_id": "GB00BMCD0001",
+      "ticker": "RCT"
+    },
+    {
+      "security_id": "IE0001827041",
+      "ticker": "CRH"
+    },
+    {
+      "security_id": "IE0003YHD8K8",
+      "ticker": "OCTV"
+    },
+    {
+      "security_id": "IE00B91XRN20",
+      "ticker": "PRTA"
+    },
+    {
+      "security_id": "IL0010828585",
+      "ticker": "WILC"
+    },
+    {
+      "security_id": "IL0011762130",
+      "ticker": "MNDY"
+    },
+    {
+      "security_id": "IL0011794802",
+      "ticker": "CLBT"
+    },
+    {
+      "security_id": "IL0011974909",
+      "ticker": "ODD"
+    },
+    {
+      "security_id": "JE00BPK4NV88",
+      "ticker": "DPC"
+    },
+    {
+      "security_id": "JE00BYSS4X48",
+      "ticker": "NVCR"
+    },
+    {
+      "security_id": "KYG0231P1081",
+      "ticker": "ALPS"
+    },
+    {
+      "security_id": "KYG0411D1236",
+      "ticker": "APLM"
+    },
+    {
+      "security_id": "KYG1156E1026",
+      "ticker": "BTTC"
+    },
+    {
+      "security_id": "KYG1311F1191",
+      "ticker": "BQ"
+    },
+    {
+      "security_id": "KYG1820C1024",
+      "ticker": "CANG"
+    },
+    {
+      "security_id": "KYG2104X1016",
+      "ticker": "MTNE"
+    },
+    {
+      "security_id": "KYG2131M1024",
+      "ticker": "CXII"
+    },
+    {
+      "security_id": "KYG237731073",
+      "ticker": "CWCO"
+    },
+    {
+      "security_id": "KYG3016G1293",
+      "ticker": "ELPW"
+    },
+    {
+      "security_id": "KYG3624C1069",
+      "ticker": "FTHA"
+    },
+    {
+      "security_id": "KYG3730V1059",
+      "ticker": "FTAI"
+    },
+    {
+      "security_id": "KYG386171253",
+      "ticker": "GIBO"
+    },
+    {
+      "security_id": "KYG3R95P1244",
+      "ticker": "OIO"
+    },
+    {
+      "security_id": "KYG4290F1182",
+      "ticker": "HAO"
+    },
+    {
+      "security_id": "KYG4453R1157",
+      "ticker": "MAAS"
+    },
+    {
+      "security_id": "KYG514051013",
+      "ticker": "CRGO"
+    },
+    {
+      "security_id": "KYG6055H1552",
+      "ticker": "BTCT"
+    },
+    {
+      "security_id": "KYG614401068",
+      "ticker": "PMA"
+    },
+    {
+      "security_id": "KYG6486G1073",
+      "ticker": "NHIV"
+    },
+    {
+      "security_id": "KYG712641086",
+      "ticker": "PLTS"
+    },
+    {
+      "security_id": "KYG7173H1011",
+      "ticker": "PFAI"
+    },
+    {
+      "security_id": "KYG7244A1278",
+      "ticker": "AURE"
+    },
+    {
+      "security_id": "KYG8191L1169",
+      "ticker": "SLBT"
+    },
+    {
+      "security_id": "KYG8193D1043",
+      "ticker": "KAZR"
+    },
+    {
+      "security_id": "KYG8274W1042",
+      "ticker": "SOS"
+    },
+    {
+      "security_id": "KYG9124M1069",
+      "ticker": "TRSG"
+    },
+    {
+      "security_id": "KYG93Y7F1068",
+      "ticker": "VECA"
+    },
+    {
+      "security_id": "KYG9470A1022",
+      "ticker": "VTEX"
+    },
+    {
+      "security_id": "KYG9767H1258",
+      "ticker": "WOK"
+    },
+    {
+      "security_id": "KYG9887T1168",
+      "ticker": "ZLAB"
+    },
+    {
+      "security_id": "KYG988921055",
+      "ticker": "ZTG"
+    },
+    {
+      "security_id": "MHY410531021",
+      "ticker": "INSW"
+    },
+    {
+      "security_id": "MHY460024018",
+      "ticker": "JXG"
+    },
+    {
+      "security_id": "NL00150745D9",
+      "ticker": "INIO"
+    },
+    {
+      "security_id": "US00187Y1001",
+      "ticker": "APG"
+    },
+    {
+      "security_id": "US0021211018",
+      "ticker": "ATEN"
+    },
+    {
+      "security_id": "US00676P1075",
+      "ticker": "ADEA"
+    },
+    {
+      "security_id": "US00737L1035",
+      "ticker": "CVSA"
+    },
+    {
+      "security_id": "US00752P2039",
+      "ticker": "ADVB"
+    },
+    {
+      "security_id": "US0089331039",
+      "ticker": "AIAI"
+    },
+    {
+      "security_id": "US0109111056",
+      "ticker": "ALMR"
+    },
+    {
+      "security_id": "US0116421050",
+      "ticker": "ALRM"
+    },
+    {
+      "security_id": "US0138721065",
+      "ticker": "AA"
+    },
+    {
+      "security_id": "US0298991011",
+      "ticker": "AWR"
+    },
+    {
+      "security_id": "US04626A1034",
+      "ticker": "ALAB"
+    },
+    {
+      "security_id": "US05338N1019",
+      "ticker": "AVAT"
+    },
+    {
+      "security_id": "US05380C1027",
+      "ticker": "RCEL"
+    },
+    {
+      "security_id": "US05601C1053",
+      "ticker": "BGSF"
+    },
+    {
+      "security_id": "US0774541066",
+      "ticker": "BDC"
+    },
+    {
+      "security_id": "US09076W3079",
+      "ticker": "BIAF"
+    },
+    {
+      "security_id": "US09225M1018",
+      "ticker": "BSM"
+    },
+    {
+      "security_id": "US0926671043",
+      "ticker": "SRTA"
+    },
+    {
+      "security_id": "US0936711052",
+      "ticker": "HRB"
+    },
+    {
+      "security_id": "US0939191088",
+      "ticker": "AIB"
+    },
+    {
+      "security_id": "US09681N1063",
+      "ticker": "BOBS"
+    },
+    {
+      "security_id": "US09940T1007",
+      "ticker": "BRUN"
+    },
+    {
+      "security_id": "US10806X1028",
+      "ticker": "BBIO"
+    },
+    {
+      "security_id": "US11882T1060",
+      "ticker": "BUDA"
+    },
+    {
+      "security_id": "US1280302027",
+      "ticker": "CALM"
+    },
+    {
+      "security_id": "US1307881029",
+      "ticker": "CWT"
+    },
+    {
+      "security_id": "US1311931042",
+      "ticker": "CALY"
+    },
+    {
+      "security_id": "US1347481020",
+      "ticker": "CAN"
+    },
+    {
+      "security_id": "US14067D6076",
+      "ticker": "CEPL"
+    },
+    {
+      "security_id": "US14149Y1082",
+      "ticker": "CAH"
+    },
+    {
+      "security_id": "US14154A1025",
+      "ticker": "CDNL"
+    },
+    {
+      "security_id": "US1564311082",
+      "ticker": "CENX"
+    },
+    {
+      "security_id": "US15672X2018",
+      "ticker": "CISO"
+    },
+    {
+      "security_id": "US1630921096",
+      "ticker": "CHGG"
+    },
+    {
+      "security_id": "US17322U3068",
+      "ticker": "CTXR"
+    },
+    {
+      "security_id": "US17331Y1091",
+      "ticker": "CTOR"
+    },
+    {
+      "security_id": "US1912161007",
+      "ticker": "KO"
+    },
+    {
+      "security_id": "US1921761052",
+      "ticker": "JVA"
+    },
+    {
+      "security_id": "US19247G1076",
+      "ticker": "COHR"
+    },
+    {
+      "security_id": "US20337X1090",
+      "ticker": "VISN"
+    },
+    {
+      "security_id": "US2056842022",
+      "ticker": "CHCI"
+    },
+    {
+      "security_id": "US2267181046",
+      "ticker": "CRTO"
+    },
+    {
+      "security_id": "US22978P2056",
+      "ticker": "CUE"
+    },
+    {
+      "security_id": "US2307701092",
+      "ticker": "CPIX"
+    },
+    {
+      "security_id": "US23128Q1013",
+      "ticker": "CURB"
+    },
+    {
+      "security_id": "US23254L8761",
+      "ticker": "BGMS"
+    },
+    {
+      "security_id": "US2333691077",
+      "ticker": "DSC"
+    },
+    {
+      "security_id": "US2358252052",
+      "ticker": "DAN"
+    },
+    {
+      "security_id": "US2376901029",
+      "ticker": "DAIO"
+    },
+    {
+      "security_id": "US23804L1035",
+      "ticker": "DDOG"
+    },
+    {
+      "security_id": "US25960R1059",
+      "ticker": "PLOW"
+    },
+    {
+      "security_id": "US26622P1075",
+      "ticker": "DOCS"
+    },
+    {
+      "security_id": "US26745T1016",
+      "ticker": "DYAI"
+    },
+    {
+      "security_id": "US2683111072",
+      "ticker": "FOCL"
+    },
+    {
+      "security_id": "US26884L1098",
+      "ticker": "EQT"
+    },
+    {
+      "security_id": "US27030F2020",
+      "ticker": "PDC"
+    },
+    {
+      "security_id": "US2814791057",
+      "ticker": "EDUC"
+    },
+    {
+      "security_id": "US2826444000",
+      "ticker": "CHRN"
+    },
+    {
+      "security_id": "US28531P2020",
+      "ticker": "ECOR"
+    },
+    {
+      "security_id": "US29271Q1031",
+      "ticker": "ESOA"
+    },
+    {
+      "security_id": "US29275Y1029",
+      "ticker": "ENS"
+    },
+    {
+      "security_id": "US2936025046",
+      "ticker": "ENSC"
+    },
+    {
+      "security_id": "US30205M3097",
+      "ticker": "XCUR"
+    },
+    {
+      "security_id": "US30212W1009",
+      "ticker": "AGNT"
+    },
+    {
+      "security_id": "US30218B2097",
+      "ticker": "XPON"
+    },
+    {
+      "security_id": "US30233T1025",
+      "ticker": "EXYN"
+    },
+    {
+      "security_id": "US3168411052",
+      "ticker": "FIG"
+    },
+    {
+      "security_id": "US3179701012",
+      "ticker": "AIFF"
+    },
+    {
+      "security_id": "US34631F1021",
+      "ticker": "FPS"
+    },
+    {
+      "security_id": "US36116M1062",
+      "ticker": "FF"
+    },
+    {
+      "security_id": "US37364X1090",
+      "ticker": "GEOS"
+    },
+    {
+      "security_id": "US37892C1062",
+      "ticker": "GGRP"
+    },
+    {
+      "security_id": "US38268T1034",
+      "ticker": "GPRO"
+    },
+    {
+      "security_id": "US3830821043",
+      "ticker": "GRC"
+    },
+    {
+      "security_id": "US40131M1099",
+      "ticker": "GH"
+    },
+    {
+      "security_id": "US4037831033",
+      "ticker": "GYRE"
+    },
+    {
+      "security_id": "US4039491000",
+      "ticker": "DINO"
+    },
+    {
+      "security_id": "US4195961010",
+      "ticker": "HVT"
+    },
+    {
+      "security_id": "US42238D1072",
+      "ticker": "HTFL"
+    },
+    {
+      "security_id": "US4523271090",
+      "ticker": "ILMN"
+    },
+    {
+      "security_id": "US4581401001",
+      "ticker": "INTC"
+    },
+    {
+      "security_id": "US4586653044",
+      "ticker": "TILE"
+    },
+    {
+      "security_id": "US45867G1013",
+      "ticker": "IDCC"
+    },
+    {
+      "security_id": "US46125A1007",
+      "ticker": "LUNR"
+    },
+    {
+      "security_id": "US4622601007",
+      "ticker": "IOVA"
+    },
+    {
+      "security_id": "US46264C3051",
+      "ticker": "AUID"
+    },
+    {
+      "security_id": "US48138M1053",
+      "ticker": "JMIA"
+    },
+    {
+      "security_id": "US49435R1023",
+      "ticker": "KRP"
+    },
+    {
+      "security_id": "US4969042021",
+      "ticker": "KWY"
+    },
+    {
+      "security_id": "US49907V2016",
+      "ticker": "KSCP"
+    },
+    {
+      "security_id": "US50050N1037",
+      "ticker": "KTB"
+    },
+    {
+      "security_id": "US51509F1057",
+      "ticker": "LE"
+    },
+    {
+      "security_id": "US51655R2004",
+      "ticker": "LNZA"
+    },
+    {
+      "security_id": "US5255582018",
+      "ticker": "LMAT"
+    },
+    {
+      "security_id": "US53635D2027",
+      "ticker": "LQDA"
+    },
+    {
+      "security_id": "US5435181046",
+      "ticker": "LOOP"
+    },
+    {
+      "security_id": "US5486611073",
+      "ticker": "LOW"
+    },
+    {
+      "security_id": "US55024U1097",
+      "ticker": "LITE"
+    },
+    {
+      "security_id": "US55305B1017",
+      "ticker": "MHO"
+    },
+    {
+      "security_id": "US55658T1051",
+      "ticker": "MAIR"
+    },
+    {
+      "security_id": "US55955D1000",
+      "ticker": "MGNI"
+    },
+    {
+      "security_id": "US56600D1072",
+      "ticker": "MRVI"
+    },
+    {
+      "security_id": "US58507V1070",
+      "ticker": "MDLN"
+    },
+    {
+      "security_id": "US59064R1095",
+      "ticker": "MLAB"
+    },
+    {
+      "security_id": "US59490A1007",
+      "ticker": "MWC"
+    },
+    {
+      "security_id": "US60365F1093",
+      "ticker": "MMED"
+    },
+    {
+      "security_id": "US60365W2017",
+      "ticker": "FIEE"
+    },
+    {
+      "security_id": "US6067102003",
+      "ticker": "MITK"
+    },
+    {
+      "security_id": "US60705V1035",
+      "ticker": "MOBI"
+    },
+    {
+      "security_id": "US60744M1062",
+      "ticker": "MBGL WI"
+    },
+    {
+      "security_id": "US6294452064",
+      "ticker": "NVEC"
+    },
+    {
+      "security_id": "US6390271012",
+      "ticker": "NATR"
+    },
+    {
+      "security_id": "US64049M2098",
+      "ticker": "NEO"
+    },
+    {
+      "security_id": "US64361Q1013",
+      "ticker": "VNOM"
+    },
+    {
+      "security_id": "US6558441084",
+      "ticker": "NSC"
+    },
+    {
+      "security_id": "US66979P3001",
+      "ticker": "XMAX"
+    },
+    {
+      "security_id": "US66987P5089",
+      "ticker": "NBY"
+    },
+    {
+      "security_id": "US67073S4066",
+      "ticker": "IMG"
+    },
+    {
+      "security_id": "US6745991058",
+      "ticker": "OXY"
+    },
+    {
+      "security_id": "US68218J1034",
+      "ticker": "OABI"
+    },
+    {
+      "security_id": "US68237F1084",
+      "ticker": "OFRM"
+    },
+    {
+      "security_id": "US6838272085",
+      "ticker": "OCC"
+    },
+    {
+      "security_id": "US68989M2026",
+      "ticker": "OUST"
+    },
+    {
+      "security_id": "US71424F1057",
+      "ticker": "PR"
+    },
+    {
+      "security_id": "US7163821066",
+      "ticker": "PETS"
+    },
+    {
+      "security_id": "US7238363003",
+      "ticker": "PPSI"
+    },
+    {
+      "security_id": "US74017N1054",
+      "ticker": "PGEN"
+    },
+    {
+      "security_id": "US74366E1029",
+      "ticker": "PTGX"
+    },
+    {
+      "security_id": "US7444302084",
+      "ticker": "PPHC"
+    },
+    {
+      "security_id": "US7469623075",
+      "ticker": "QTI"
+    },
+    {
+      "security_id": "US74766Q1013",
+      "ticker": "QTRX"
+    },
+    {
+      "security_id": "US74837P4054",
+      "ticker": "QUIK"
+    },
+    {
+      "security_id": "US74906Q1022",
+      "ticker": "QMLS"
+    },
+    {
+      "security_id": "US7530401048",
+      "ticker": "ROC"
+    },
+    {
+      "security_id": "US75340L1044",
+      "ticker": "RPID"
+    },
+    {
+      "security_id": "US75901B1070",
+      "ticker": "RGNX"
+    },
+    {
+      "security_id": "US7599161095",
+      "ticker": "RGEN"
+    },
+    {
+      "security_id": "US7843051043",
+      "ticker": "HTO"
+    },
+    {
+      "security_id": "US78475V1035",
+      "ticker": "MWH"
+    },
+    {
+      "security_id": "US78577G3011",
+      "ticker": "NWTG"
+    },
+    {
+      "security_id": "US80007P8692",
+      "ticker": "SD"
+    },
+    {
+      "security_id": "US80303D3052",
+      "ticker": "SNWV"
+    },
+    {
+      "security_id": "US81517B1017",
+      "ticker": "SECZ"
+    },
+    {
+      "security_id": "US8342033094",
+      "ticker": "SLNO"
+    },
+    {
+      "security_id": "US8485603067",
+      "ticker": "SPIR"
+    },
+    {
+      "security_id": "US85238K1007",
+      "ticker": "USDE"
+    },
+    {
+      "security_id": "US86633R6099",
+      "ticker": "DVLT"
+    },
+    {
+      "security_id": "US8669661048",
+      "ticker": "SUNB"
+    },
+    {
+      "security_id": "US86723E1047",
+      "ticker": "RMIX"
+    },
+    {
+      "security_id": "US87650L1035",
+      "ticker": "TARS"
+    },
+    {
+      "security_id": "US88023U1016",
+      "ticker": "SGI"
+    },
+    {
+      "security_id": "US88162F1057",
+      "ticker": "TTI"
+    },
+    {
+      "security_id": "US88583P2039",
+      "ticker": "SCWO"
+    },
+    {
+      "security_id": "US8905161076",
+      "ticker": "TR"
+    },
+    {
+      "security_id": "US89616X2053",
+      "ticker": "TDTH"
+    },
+    {
+      "security_id": "US9004502061",
+      "ticker": "TBCH"
+    },
+    {
+      "security_id": "US9043111072",
+      "ticker": "UAA"
+    },
+    {
+      "security_id": "US9113631090",
+      "ticker": "URI"
+    },
+    {
+      "security_id": "US9116841084",
+      "ticker": "AD"
+    },
+    {
+      "security_id": "US91307C1027",
+      "ticker": "UTHR"
+    },
+    {
+      "security_id": "US92347M1009",
+      "ticker": "VERI"
+    },
+    {
+      "security_id": "US92511W2070",
+      "ticker": "VRCA"
+    },
+    {
+      "security_id": "US9255501051",
+      "ticker": "VIAV"
+    },
+    {
+      "security_id": "US9264001028",
+      "ticker": "VSXY"
+    },
+    {
+      "security_id": "US92852X1037",
+      "ticker": "VTS"
+    },
+    {
+      "security_id": "US96327X2009",
+      "ticker": "WFCF"
+    },
+    {
+      "security_id": "US98212N1072",
+      "ticker": "WRAP"
+    },
+    {
+      "security_id": "US9837931008",
+      "ticker": "XPO"
+    },
+    {
+      "security_id": "US98389B1008",
+      "ticker": "XEL"
+    },
+    {
+      "security_id": "US9851942089",
+      "ticker": "YSG"
+    },
+    {
+      "security_id": "US98980F1049",
+      "ticker": "GTM"
+    },
+    {
+      "security_id": "VGG0602B1186",
+      "ticker": "AUC"
+    },
+    {
+      "security_id": "VGG1890L1076",
+      "ticker": "CPRI"
+    },
+    {
+      "security_id": "VGG244981186",
+      "ticker": "ARCL"
+    },
+    {
+      "security_id": "VGG5146R1073",
+      "ticker": "JMG"
+    },
+    {
+      "security_id": "VGG6375R1073",
+      "ticker": "NESR"
+    }
+  ],
+  "snapshot_date": "2026-08-28",
+  "source_audit": "universe/policy_audits/2026-08-28/33615322852-1.json",
+  "deferred": [
+    {
+      "security_id": "IE00BDGMC594",
+      "ticker": "AVDL",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-02-12",
+      "detail": "Alkermes; bukan IPO baru.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1012477/000110465926013880/0001104659-26-013880-index.htm"
+    },
+    {
+      "security_id": "IL0010823123",
+      "ticker": "MGIC",
+      "reason": "Merger selesai",
+      "event_date": "2026-02-24",
+      "detail": "Matrix IT; perdagangan terakhir 23 Februari.",
+      "source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-102"
+    },
+    {
+      "security_id": "IL0011334468",
+      "ticker": "CYBR",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-02-11",
+      "detail": "Palo Alto Networks; jangan sambung histori CYBR ke PANW.",
+      "source": "https://investors.paloaltonetworks.com/news-releases/news-release-details/palo-alto-networks-completes-acquisition-cyberark-secure--ai-era"
+    },
+    {
+      "security_id": "KYG177661090",
+      "ticker": "CMBM",
+      "reason": "Delisting / OTC",
+      "event_date": "2026-03-26/27",
+      "detail": "CMBMF; perubahan venue bukan perubahan compliance.",
+      "source": "https://cdn.cboe.com/resources/product_restriction/2026/Cboe-Options-Exchanges-Restrictions-on-Transactions-in-Options-on-Cambium-Networks-Corporation.pdf"
+    },
+    {
+      "security_id": "KYG189321063",
+      "ticker": "CAPT",
+      "reason": "Delisting / OTC",
+      "event_date": "2026-07-23",
+      "detail": "Form 25 menetapkan penghapusan listing 23 Juli; tidak memverifikasi feed OTC Yahoo.",
+      "source": "https://www.otcmarkets.com/filing/html?guid=7ie-kpD3VPAIIch&id=19605787"
+    },
+    {
+      "security_id": "KYG3R95P1087",
+      "ticker": "ESGL",
+      "reason": "Ganti nama/ticker",
+      "event_date": "2026-03-10",
+      "detail": "OIO; periksa ISIN/reverse split dan deduplikasi, jangan langsung alias.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1957538/000149315226009537/ex99-1.htm"
+    },
+    {
+      "security_id": "KYG8726A1067",
+      "ticker": "TCGL",
+      "reason": "Suspended / OTC; banding",
+      "event_date": "2026-08-25 (laporan)",
+      "detail": "NYSE American tetap suspended; OTC TCGLF; banding masih dalam proses.",
+      "source": "https://investor.techcreategroup.com/news-events/press-releases/detail/73/techcreate-group-ltd-to-request-review-of-nyse-panel-decision"
+    },
+    {
+      "security_id": "US03152W1099",
+      "ticker": "FOLD",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-04-27",
+      "detail": "BioMarin.",
+      "source": "https://www.biomarin.com/news/press-releases/biomarin-completes-acquisition-of-amicus-therapeutics/"
+    },
+    {
+      "security_id": "US03753U1060",
+      "ticker": "APLS",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-05-14",
+      "detail": "Biogen.",
+      "source": "https://investors.biogen.com/news-releases/news-release-details/biogen-completes-acquisition-apellis-pharmaceuticals"
+    },
+    {
+      "security_id": "US1270971039",
+      "ticker": "CTRA",
+      "reason": "Merger selesai",
+      "event_date": "2026-05-07",
+      "detail": "Devon; penerus DVN bukan alias harga CTRA.",
+      "source": "https://www.devonenergy.com/news/2026/Devon-Energy-and-Coterra-Energy-Complete-Merger"
+    },
+    {
+      "security_id": "US1282461052",
+      "ticker": "CVGW",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-05-28",
+      "detail": "Mission Produce.",
+      "source": "https://missionproduce.com/news/mission-produce-completes-acquisition-of-calavo-growers-advancing-its-north-american-avocado-fresh-produce-platform/"
+    },
+    {
+      "security_id": "US30063P1057",
+      "ticker": "EXAS",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-03-23",
+      "detail": "Abbott.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1800/000162828026050134/abt-20260630.htm"
+    },
+    {
+      "security_id": "US4364401012",
+      "ticker": "HOLX",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-04-07",
+      "detail": "Menjadi perusahaan privat.",
+      "source": "https://www.hologic.com/acquisition"
+    },
+    {
+      "security_id": "US5747951003",
+      "ticker": "MASI",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-06-10",
+      "detail": "Danaher.",
+      "source": "https://investors.danaher.com/2026-06-10-Danaher-Completes-Acquisition-of-Masimo-Corporation"
+    },
+    {
+      "security_id": "US66373M4087",
+      "ticker": "NCL",
+      "reason": "Trading halt",
+      "event_date": "2026-06-25",
+      "detail": "FAQ perusahaan menyebut halt selama review laporan 2025; bukan bukti delisting final.",
+      "source": "https://ir.northann.com/faq"
+    },
+    {
+      "security_id": "US68278B1070",
+      "ticker": "OS",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-04-01",
+      "detail": "Kelompok Hg; Nasdaq suspension 2 April.",
+      "source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-197"
+    },
+    {
+      "security_id": "US7376301039",
+      "ticker": "PCH",
+      "reason": "Merger selesai",
+      "event_date": "2026-01-30",
+      "detail": "Rayonier.",
+      "source": "https://www.sec.gov/Archives/edgar/data/52827/000005282726000099/ryn-20260630.htm"
+    },
+    {
+      "security_id": "US7495271071",
+      "ticker": "REVG",
+      "reason": "Merger selesai",
+      "event_date": "2026-02-02",
+      "detail": "Terex.",
+      "source": "https://www.sec.gov/Archives/edgar/data/97216/000114036126003269/ef20064508_8k.htm"
+    },
+    {
+      "security_id": "US81686C1045",
+      "ticker": "SEMR",
+      "reason": "Akuisisi selesai",
+      "event_date": "2026-04-28",
+      "detail": "Adobe.",
+      "source": "https://news.adobe.com/news/2026/04/adobe-completes-semrush-acquisition"
+    },
+    {
+      "security_id": "US82670R3057",
+      "ticker": "SGN",
+      "reason": "Business combination selesai",
+      "event_date": "2026-03-16",
+      "detail": "Entitas induk baru BlockchAIn, AIB mulai diperdagangkan 17 Maret. Bukan alias sederhana.",
+      "source": "https://www.sec.gov/Archives/edgar/data/2070542/000121390026063747/R7.htm"
+    },
+    {
+      "security_id": "US88362T1034",
+      "ticker": "THR",
+      "reason": "Merger selesai",
+      "event_date": "2026-06-01",
+      "detail": "CECO; THR dihentikan dari perdagangan NYSE.",
+      "source": "https://www.sec.gov/Archives/edgar/data/1489096/000110465926068666/tm2616040d1_8k.htm"
+    },
+    {
+      "security_id": "US9026851066",
+      "ticker": "UDMY",
+      "reason": "Merger selesai",
+      "event_date": "2026-05-11",
+      "detail": "Coursera.",
+      "source": "https://investor.coursera.com/news/news-details/2026/Coursera-Completes-Combination-with-Udemy-to-Build-the-Worlds-Most-Comprehensive-Skills-Platform/default.aspx"
+    },
+    {
+      "security_id": "US98986M1036",
+      "ticker": "ZYXI",
+      "reason": "Saham lama dibatalkan",
+      "event_date": "2026-03-26",
+      "detail": "Reorganisasi Chapter 11; jangan retry sebagai saham lama aktif.",
+      "source": "https://www.sec.gov/Archives/edgar/data/846475/000110465926035292/zyxi-20260326x1512g.htm"
+    }
+  ],
+  "note": "235 original candidates plus four reviewed provider-ticker repairs. Deferred 23 are operational exceptions, not compliance exclusions; see docs/27-ticker-review-2026-09-02.md. ESGL is NOT aliased to existing OIO."
+}
