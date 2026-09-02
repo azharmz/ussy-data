@@ -26,6 +26,10 @@ class ComplianceTests(unittest.TestCase):
     def test_no_secondary_comparisons_in_pipeline(self):
         for path in (ROOT / 'src').glob('*.py'):
             tree = ast.parse(path.read_text(encoding='utf-8-sig'))
+            # One reporting-only field compares the historical policy; never a filter.
+            audit_comparisons = {id(node.value) for node in ast.walk(tree)
+                if path.name == 'audit_universe_freshness.py' and isinstance(node, ast.keyword)
+                and node.arg == 'excluded_by_old_dual_filter'}
             for node in ast.walk(tree):
-                if isinstance(node, ast.Compare):
+                if isinstance(node, ast.Compare) and id(node) not in audit_comparisons:
                     self.assertNotIn('musaffaHalalRating', ast.unparse(node), str(path))
