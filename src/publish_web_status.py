@@ -344,6 +344,11 @@ def build_status_document(client, bucket: str) -> dict[str, Any]:
         freshness_counts["created_at"] = freshness_doc.get("created_at")
         freshness_counts["live_earnings_verified"] = freshness_doc.get("live_earnings_verified", False)
         review_queue = _build_review_queue(freshness_doc, readiness_doc, membership_doc)
+    from investigation_records import attach_investigations, load_records
+    try:
+        review_queue = attach_investigations(review_queue, load_records(), snapshot_date)
+    except (ValueError, KeyError, OSError) as exc:
+        raise SchemaError('Investigation registry invalid; publication stopped') from exc
     pipeline_status = _determine_pipeline_status(freshness_counts, readiness_doc)
 
     doc = {

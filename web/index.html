@@ -473,6 +473,7 @@
 
     <section aria-labelledby="queue-h">
       <h2 id="queue-h">Review queue</h2>
+      <p class="disclaimer">Terdeteksi tidak berarti sudah diteliti. Catatan investigasi berlaku untuk jenis masalah dan snapshot terkait; bukan bukti screening syariah terbaru atau perbaikan data sudah selesai.</p>
       <div class="queue-controls">
         <input type="search" id="queueSearch" placeholder="Search ticker or security ID&hellip;" aria-label="Search ticker or security ID">
         <select id="queueFilter" aria-label="Filter by category">
@@ -494,6 +495,7 @@
               <th scope="col">Security ID</th>
               <th scope="col">Category</th>
               <th scope="col">Reason</th>
+              <th scope="col">Investigasi</th>
               <th scope="col">Screening updated</th>
               <th scope="col">Recorded earnings</th>
               <th scope="col">Last market date</th>
@@ -668,6 +670,33 @@
       var tdReason = document.createElement("td");
       tdReason.textContent = rec.reason || "\u2014";
       tr.appendChild(tdReason);
+
+      var tdReview = document.createElement("td");
+      var investigation = rec.investigation;
+      if (!investigation) {
+        tdReview.textContent = "Informasi investigasi belum dimuat — publikasikan status terbaru.";
+      } else if (investigation.status === "REVIEWED_FOLLOW_UP_REQUIRED") {
+        var title = document.createElement("strong");
+        title.textContent = "Sudah diteliti · perlu tindak lanjut";
+        tdReview.appendChild(title);
+        var evidence = document.createElement("div");
+        evidence.textContent = (investigation.reviewed_at || "") + " — " + (investigation.finding || "") + ". " + (investigation.detail || "");
+        tdReview.appendChild(evidence);
+        try {
+          var source = new URL(investigation.source_url);
+          if (source.protocol === "https:") {
+            var link = document.createElement("a");
+            link.href = source.href;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Sumber catatan review";
+            tdReview.appendChild(link);
+          }
+        } catch (_) { /* Invalid links are not rendered. */ }
+      } else {
+        tdReview.textContent = "Terdeteksi · belum ada catatan investigasi";
+      }
+      tr.appendChild(tdReview);
 
       var tdScreen = document.createElement("td");
       tdScreen.textContent = rec.screening_updated_at || "\u2014";
