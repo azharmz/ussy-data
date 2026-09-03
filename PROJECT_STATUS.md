@@ -1,5 +1,8 @@
 # USSY - status dan panduan melanjutkan
 
+> **Handoff terbaru: 4 September 2026 — baca [docs/HANDOFF-2026-09-04.md](docs/HANDOFF-2026-09-04.md) terlebih dahulu.**
+> Bagian di bawah dipertahankan sebagai catatan historis 2 September sebelum repair OHLC dan audit freshness selesai; bukan status terkini. Handoff terbaru mencatat ekspor yang sudah diverifikasi, 18 kandidat tertinggal, perubahan web yang sudah dicommit (publikasi belum dikonfirmasi), dan SPY yang belum diambil.
+
 Diperbarui: 2 September 2026. Repo: D:\Stock\Claude\ussy-data.
 Angka R2 di bawah bersumber dari log yang dikirim user, bukan pemeriksaan langsung terbaru.
 
