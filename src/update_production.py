@@ -119,6 +119,46 @@ def extract_symbol(frame: pd.DataFrame, symbol: str, symbol_count: int) -> pd.Da
     return pd.DataFrame()
 
 
+def normalize_with_individual_fallback(
+    batch_raw: pd.DataFrame,
+    symbol: str,
+    last_date: pd.Timestamp,
+    max_retries: int,
+    security_id: str,
+    ticker: str,
+) -> pd.DataFrame:
+    """Normalize batch data, retrying one symbol when batch data is absent or fails QC."""
+    if batch_raw.empty:
+        LOG.warning("No batch rows for %s; retrying individually", symbol)
+        individual_raw = download_since(symbol, last_date, max_retries)
+        return (
+            pd.DataFrame()
+            if individual_raw.empty
+            else normalize_history(individual_raw, security_id, ticker)
+        )
+
+    try:
+        return normalize_history(batch_raw, security_id, ticker)
+    except Exception as batch_exc:
+        LOG.warning(
+            "Batch rows for %s failed normalization/QC; retrying individually: %s",
+            symbol,
+            batch_exc,
+        )
+        individual_raw = download_since(symbol, last_date, max_retries)
+        if individual_raw.empty:
+            raise RuntimeError(
+                f"batch normalization/QC failed ({batch_exc}); individual retry returned no rows"
+            ) from batch_exc
+        try:
+            return normalize_history(individual_raw, security_id, ticker)
+        except Exception as individual_exc:
+            raise RuntimeError(
+                "batch and individual normalization/QC failed; "
+                f"batch={batch_exc}; individual={individual_exc}"
+            ) from individual_exc
+
+
 def normalize_existing(frame: pd.DataFrame, security_id: str, ticker: str) -> pd.DataFrame:
     missing = set(OHLCV_COLUMNS) - set(frame.columns)
     if missing:
@@ -201,13 +241,18 @@ def main() -> None:
             key = f"backtest/ohlcv/{security_id}.parquet"
             try:
                 downloaded_raw = extract_symbol(batch_frame, symbol, len(symbols))
-                if downloaded_raw.empty:
-                    LOG.warning("No batch rows for %s; retrying individually", symbol)
-                    downloaded_raw = download_since(symbol, last_date, args.max_retries)
+                normalized_download = normalize_with_individual_fallback(
+                    downloaded_raw,
+                    symbol,
+                    last_date,
+                    args.max_retries,
+                    security_id,
+                    ticker,
+                )
                 downloaded = (
                     historical.iloc[0:0].copy()
-                    if downloaded_raw.empty
-                    else normalize_history(downloaded_raw, security_id, ticker)
+                    if normalized_download.empty
+                    else normalized_download
                 )
                 additions = downloaded[downloaded["date"] > last_date].copy()
                 if not additions.empty:
