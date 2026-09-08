@@ -1,6 +1,6 @@
 """Read-only comparison of Tiingo EOD and Yahoo daily OHLCV."""
 from __future__ import annotations
-import argparse, csv, json, math, os, time, urllib.parse, urllib.request
+import argparse, csv, json, math, os, time, urllib.error, urllib.parse, urllib.request
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -21,8 +21,14 @@ def issues(row):
 def fetch(symbol, start, end, token):
     q = urllib.parse.urlencode({"startDate": start, "endDate": end, "token": token})
     req = urllib.request.Request(f"https://api.tiingo.com/tiingo/daily/{symbol}/prices?{q}", headers={"User-Agent":"ussy-data-audit/1"})
-    with urllib.request.urlopen(req, timeout=30) as r: data = json.loads(r.read())
-    if not isinstance(data, list): raise ValueError("Tiingo response was not a price list")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r: data = json.loads(r.read())
+    except urllib.error.HTTPError as exc:
+        # The body normally identifies entitlement, quota, or symbol problems.
+        # Do not include request URLs: they contain the API token.
+        detail = exc.read().decode("utf-8", "replace")[:500].replace(token, "[REDACTED]")
+        raise ValueError(f"Tiingo HTTP {exc.code}: {detail}") from exc
+    if not isinstance(data, list): raise ValueError(f"Tiingo response was not a price list: {str(data)[:500]}")
     rows=[]
     for src in data:
         row={"date": str(src.get("date", ""))[:10]}
