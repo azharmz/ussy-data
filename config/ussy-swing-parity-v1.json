@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_repository": "D:\\Stock\\Claude\\ussy-swing-actions",
+  "source_commit": "7c4dc4040f2ac7602fd8dae5204d0b6e4c81c623",
+  "feature_engine_sha256": "37945a31d7caefb0fbd391eb181080b44ed3980a60c4c4584f4fb0920e9ee7f5",
+  "signal_engine_sha256": "a2a26bbcc8e5e9a3a3c9ffb5f74b83f717eaa8dadecefa7b1f00d59c6da21071",
+  "holding_period_days": 10,
+  "cases": [
+    {"name":"pullback_entry_and_stop_same_bar","state":{"status":"pending","strategy":"pullback","days_in_status":0,"entry_price":100.0,"stop_loss":90.0,"take_profit":120.0},"bars":[{"open":100,"high":103,"low":89,"close":95}],"expected":{"status":"sl_hit","entry_price_actual":100.0,"exit_price":90.0,"days_in_status":0}},
+    {"name":"breakout_entry","state":{"status":"pending","strategy":"breakout","days_in_status":0,"entry_price":100.0,"stop_loss":90.0,"take_profit":120.0},"bars":[{"open":101,"high":104,"low":95,"close":103}],"expected":{"status":"entered","entry_price_actual":101.0,"days_in_status":0}},
+    {"name":"gap_through_stop","state":{"status":"entered","strategy":"breakout","days_in_status":0,"entry_price_actual":100.0,"stop_loss":90.0,"take_profit":120.0},"bars":[{"open":85,"high":88,"low":80,"close":82}],"expected":{"status":"sl_hit","exit_price":85.0,"days_in_status":1}},
+    {"name":"take_profit","state":{"status":"entered","strategy":"breakout","days_in_status":0,"entry_price_actual":100.0,"stop_loss":90.0,"take_profit":120.0},"bars":[{"open":105,"high":121,"low":100,"close":118}],"expected":{"status":"tp_hit","exit_price":120.0,"days_in_status":1}},
+    {"name":"max_hold_10","state":{"status":"entered","strategy":"breakout","days_in_status":9,"entry_price_actual":100.0,"stop_loss":90.0,"take_profit":120.0},"bars":[{"open":106,"high":109,"low":101,"close":108}],"expected":{"status":"closed_timeout","exit_price":108.0,"days_in_status":10}}
+  ]
+}
