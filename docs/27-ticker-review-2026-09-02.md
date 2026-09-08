@@ -61,5 +61,4 @@ Konfirmasi ticker P setelah tanggal efektif: [Everpure, 26 Agustus 2026](https:/
 
 Provider alias CMPO→GPGI, PSTG→P, SCVL→SHOE, USEG→BSIN sudah ditambahkan di src/provider_symbols.py dan dipakai pada bootstrap serta produksi harian. Security ID dan ticker sumber tidak diubah. ESGL tidak dipetakan ke OIO; SGN tidak dipetakan ke AIB. Ketersediaan dan kecukupan data Yahoo belum diuji langsung.
 
-Workflow **Bootstrap reviewed tickers** memproses maksimal 239 kandidat, melewati histori yang sudah tersedia, lalu rebuild rolling/readiness, export ready dan publish web. Commit dan push dahulu, lalu jalankan workflow saat universe/publish tidak berjalan. Jangan jalankan workflow lain yang menulis R2 secara bersamaan. Hasil aktual dan kode Yahoo tercatat pada manifest bootstrap. 23 kasus yang ditunda memiliki alasan dan sumber masing-masing dalam config/bootstrap-policy-2026-08-28.json.
-
+Workflow **Bootstrap reviewed tickers** telah retired setelah bootstrap yang terdokumentasi selesai. Paragraf ini dipertahankan sebagai catatan historis; jangan menjalankan bootstrap ulang tanpa kebutuhan baru yang disetujui. Hasil aktual dan kode Yahoo tercatat pada manifest bootstrap. 23 kasus yang ditunda memiliki alasan dan sumber masing-masing dalam config/bootstrap-policy-2026-08-28.json.

@@ -1,6 +1,6 @@
 # Repair 37 bar tanggal 1 September 2026 (reuse 34)
 
-Commit/push, tunggu workflow universe dan produksi selesai, lalu jalankan Actions → **Repair 37 OHLC bars (reuse 34)**. Jangan menjalankan update universe secara bersamaan. Workflow menggunakan concurrency produksi yang sama. Tidak perlu menjalankan bootstrap universe.
+Workflow **Repair 37 OHLC bars (reuse 34)** telah retired setelah insiden selesai. Dokumen ini dipertahankan sebagai bukti dan prosedur historis; jangan menjalankannya kembali tanpa insiden baru dan review eksplisit.
 
 Urutan: validasi 34 hasil fetch yang tersimpan → capture histori 37 sekuritas, daily, rolling, readiness, pointer dan ready aktif → backup byte asli ke R2 `audit/ohlcv-repairs/<id>/before/` dan artifact → fetch hanya CHOW, POAS, PXED untuk tanggal 1 September → validasi seluruh kandidat dan rolling → conditional write pada object yang berubah → ekspor ready → verifikasi hash dan QC seluruh ready.
 

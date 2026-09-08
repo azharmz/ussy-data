@@ -2,15 +2,9 @@
 
 Tujuan: membandingkan bar NPO (`US29355X1072`) tanggal 2026-09-01 pada ready yang dilaporkan, histori, rolling, daily, serta hasil fetch ulang Yahoo sebelum/sesudah normalisasi.
 
-## Jalankan
+## Catatan historis
 
-1. Commit dan push perubahan dengan GitHub Desktop.
-2. Tunggu workflow pengubah universe/produksi selesai agar bukti tidak berubah selama pembacaan.
-3. Buka GitHub Actions → **Diagnose NPO OHLC (read-only)** → **Run workflow** pada branch yang sudah berisi perubahan.
-4. Setelah selesai, buka bagian **Artifacts** dan unduh `npo-ohlc-evidence-<run_id>-<attempt>`.
-5. Kirim `report.json` dari artifact terlebih dahulu untuk dianalisis. Tidak perlu mengirim semua Parquet.
-
-Jika workflow merah, tetap periksa artifact: bukti parsial diunggah jika tersedia. Warna hijau berarti pengumpulan bukti selesai, bukan otomatis berarti harga valid.
+Workflow diagnostik NPO telah retired setelah investigasi selesai. Dokumen ini dipertahankan sebagai bukti historis; jangan mencoba menjalankan ulang workflow tersebut. Artifact yang dihasilkan dahulu bernama `npo-ohlc-evidence-<run_id>-<attempt>`.
 
 ## Batas operasi
 
