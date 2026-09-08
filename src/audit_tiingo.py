@@ -41,6 +41,42 @@ def fetch(symbol, start, end, token):
     if not rows or len({x["date"] for x in rows}) != len(rows): raise ValueError("empty or duplicate dates")
     return rows
 
+def compare_rows(tiingo_rows, yahoo_rows):
+    tiingo = {row["date"]: row for row in tiingo_rows}
+    yahoo_observed = {row["date"]: row for row in yahoo_rows}
+    yahoo_valid = {day: row for day, row in yahoo_observed.items() if not row["issues"]}
+    common = sorted(set(tiingo) & set(yahoo_valid))
+    overlap = []
+    for day in common:
+        t, y = tiingo[day], yahoo_valid[day]
+        raw_delta = {field: t[field] - y[field] for field in FIELDS}
+        adjusted_delta = None
+        if (t["adj_close"] is not None and y["adj_close"] is not None
+                and math.isfinite(t["adj_close"]) and math.isfinite(y["adj_close"])):
+            adjusted_delta = t["adj_close"] - y["adj_close"]
+        overlap.append({
+            "date": day,
+            "absolute_delta": raw_delta,
+            "relative_delta": {field: None if y[field] == 0 else raw_delta[field] / y[field] for field in FIELDS},
+            "adj_close_absolute_delta": adjusted_delta,
+        })
+    return {
+        "tiingo_latest_date": max(tiingo) if tiingo else None,
+        "yahoo_latest_valid_date": max(yahoo_valid) if yahoo_valid else None,
+        "yahoo_observed_dates_with_issues": {day: row["issues"] for day, row in yahoo_observed.items() if row["issues"]},
+        "dates_only_in_tiingo": sorted(set(tiingo) - set(yahoo_valid)),
+        "dates_only_in_yahoo": sorted(set(yahoo_valid) - set(tiingo)),
+        "common_date_count": len(common),
+        "overlap": overlap,
+    }
+
+def write_csv(path, rows):
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=("date", *FIELDS, "adj_close", "issues"), extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "issues": "|".join(row.get("issues", []))})
+
 def yahoo(symbol, start, end):
     import pandas as pd, yfinance as yf
     raw=yf.download(symbol,start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False,prepost=False,progress=False,threads=False,timeout=30)
@@ -49,6 +85,7 @@ def yahoo(symbol, start, end):
     for stamp, src in raw.iterrows():
         row={"date":pd.Timestamp(stamp).strftime("%Y-%m-%d")}
         for f,c in (("open","Open"),("high","High"),("low","Low"),("close","Close"),("volume","Volume")): row[f]=float(src[c])
+        row["adj_close"] = float(src["Adj Close"])
         row["issues"]=issues(row); out.append(row)
     return out
 
@@ -64,7 +101,10 @@ def main():
         if i: time.sleep(a.request_delay)
         result={"symbol":s}; report["results"].append(result)
         try:
-            t=fetch(s,start,end,token); y=yahoo(s,start,end); result.update({"status":"complete","tiingo_rows":len(t),"yahoo_rows":len(y),"tiingo_latest_date":max(x["date"] for x in t),"yahoo_latest_date":max((x["date"] for x in y),default=None),"dates_only_in_tiingo":sorted(set(x["date"] for x in t)-set(x["date"] for x in y)),"dates_only_in_yahoo":sorted(set(x["date"] for x in y)-set(x["date"] for x in t))})
+            t=fetch(s,start,end,token); y=yahoo(s,start,end)
+            write_csv(out / f"{s}-tiingo.csv", t)
+            write_csv(out / f"{s}-yahoo.csv", y)
+            result.update({"status":"complete", "tiingo_rows":len(t), "yahoo_rows":len(y), "comparison":compare_rows(t, y)})
         except Exception as e: result.update(status="failed",error_type=type(e).__name__,error=str(e)); report["errors"].append({"symbol":s,"error_type":type(e).__name__})
         path.write_text(json.dumps(report,indent=2),encoding="utf-8")
     report.update(status="complete" if not report["errors"] else "complete_with_errors",finished_at=datetime.now(UTC).isoformat()); path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return 1 if report["errors"] else 0

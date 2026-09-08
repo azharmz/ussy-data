@@ -16,7 +16,8 @@ on:
         required: true
         default: "10"
   schedule:
-    - cron: "30 23 * * 1-5"
+    # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
+    - cron: "0 3 * * 1-5"
 
 permissions:
   contents: read
