@@ -1,0 +1,39 @@
+name: Audit three pre-backtest invalid bars (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-daily
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - run: python -m unittest discover -s tests
+      - name: Capture R2 and current Yahoo evidence without repair
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          PYTHONUNBUFFERED: '1'
+        run: python src/audit_prebacktest_invalid_bars.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: prebacktest-invalid-bars-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/prebacktest-invalid-bars/
+          retention-days: 30
+          if-no-files-found: warn
