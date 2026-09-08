@@ -71,35 +71,39 @@ def main() -> int:
             sid, ticker = target["security_id"], target["ticker"]
             item = {**target, "status": "failed"}
             report["targets"].append(item)
-            key = f"backtest/ohlcv/{sid}.parquet"
-            obj = s3.get_object(Bucket=bucket, Key=key)
-            body, etag = obj["Body"].read(), obj["ETag"]
-            captured[key] = etag
-            (out / f"{sid}-stored.parquet").write_bytes(body)
-            frame = pd.read_parquet(io.BytesIO(body))
-            stored = target_row(frame, target)
-            day = pd.to_datetime(stored["date"], utc=True).date()
-            item.update(stored_date=day.isoformat(), stored_ohlcv=values(stored), stored_qc=issues(stored),
-                        history_etag=etag, history_sha256=hashlib.sha256(body).hexdigest())
-            start, end = day.isoformat(), (day + timedelta(days=1)).isoformat()
-            symbol = yahoo_symbol(ticker, sid)
-            item["provider_request"] = {"symbol": symbol, "start": start, "end": end,
-                "interval": "1d", "auto_adjust": False, "repair": False, "prepost": False}
-            raw = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=False,
-                              actions=False, repair=False, prepost=False, progress=False, threads=False, timeout=30)
-            raw.to_parquet(out / f"{sid}-yahoo-raw.parquet", index=True)
-            if raw.empty:
-                raise ValueError("Provider returned no bar")
-            normalized = normalize_history(extract_symbol(raw, symbol, 1), sid, ticker)
-            selected = normalized[pd.to_datetime(normalized["date"], utc=True).dt.date == day]
-            if len(selected) != 1:
-                raise ValueError("Provider returned missing or duplicate target date")
-            provider = selected.iloc[0].to_dict()
-            provider_issues = issues(provider)
-            item.update(provider_ohlcv=values(provider), provider_qc=provider_issues,
-                        delta_provider_minus_stored=compare(stored, provider),
-                        repair_evidence_confirmed=not provider_issues)
-            item["status"] = "provider_valid" if not provider_issues else "provider_invalid"
+            try:
+                key = f"backtest/ohlcv/{sid}.parquet"
+                obj = s3.get_object(Bucket=bucket, Key=key)
+                body, etag = obj["Body"].read(), obj["ETag"]
+                captured[key] = etag
+                (out / f"{sid}-stored.parquet").write_bytes(body)
+                frame = pd.read_parquet(io.BytesIO(body))
+                stored = target_row(frame, target)
+                day = pd.to_datetime(stored["date"], utc=True).date()
+                item.update(stored_date=day.isoformat(), stored_ohlcv=values(stored), stored_qc=issues(stored),
+                            history_etag=etag, history_sha256=hashlib.sha256(body).hexdigest())
+                start, end = day.isoformat(), (day + timedelta(days=1)).isoformat()
+                symbol = yahoo_symbol(ticker, sid)
+                item["provider_request"] = {"symbol": symbol, "start": start, "end": end,
+                    "interval": "1d", "auto_adjust": False, "repair": False, "prepost": False}
+                raw = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=False,
+                                  actions=False, repair=False, prepost=False, progress=False, threads=False, timeout=30)
+                raw.to_parquet(out / f"{sid}-yahoo-raw.parquet", index=True)
+                if raw.empty:
+                    raise ValueError("Provider returned no bar")
+                normalized = normalize_history(extract_symbol(raw, symbol, 1), sid, ticker)
+                selected = normalized[pd.to_datetime(normalized["date"], utc=True).dt.date == day]
+                if len(selected) != 1:
+                    raise ValueError("Provider returned missing or duplicate target date")
+                provider = selected.iloc[0].to_dict()
+                provider_issues = issues(provider)
+                item.update(provider_ohlcv=values(provider), provider_qc=provider_issues,
+                            delta_provider_minus_stored=compare(stored, provider),
+                            repair_evidence_confirmed=not provider_issues)
+                item["status"] = "provider_valid" if not provider_issues else "provider_invalid"
+            except Exception as exc:
+                item.update(status="provider_unavailable", error_type=type(exc).__name__,
+                            error=str(exc)[:200])
             save()
         for key, etag in captured.items():
             if s3.head_object(Bucket=bucket, Key=key)["ETag"] != etag:
