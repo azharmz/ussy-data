@@ -133,7 +133,9 @@ def main() -> int:
                 tiingo = tiingo_row(ticker, day, tiingo_token)
                 item.update(tiingo_ohlcv=values(tiingo), tiingo_adj_close=float(tiingo["adj_close"]),
                             tiingo_qc=issues(tiingo), delta_tiingo_minus_stored=compare(stored, tiingo),
-                            repair_evidence_confirmed=True, status="tiingo_valid")
+                            tiingo_bar_valid=True, repair_evidence_confirmed=False,
+                            repair_review_reason="A valid Tiingo bar is independent evidence, not automatic authorization to overwrite Yahoo-basis history.",
+                            status="tiingo_valid")
             except Exception as exc:
                 item.update(status="tiingo_unavailable", error_type=type(exc).__name__,
                             error=str(exc)[:200])
