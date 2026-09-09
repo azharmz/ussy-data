@@ -51,7 +51,7 @@ def tiingo_row(symbol: str, day, token: str) -> dict:
         raise ValueError("Tiingo returned missing or duplicate target date")
     source = data[0]
     result = {"date": str(source.get("date", ""))[:10]}
-    for field in FIELDS:
+    for field in ("open", "high", "low", "close", "volume"):
         result[field] = float(source[field])
     result["adj_close"] = float(source["adjClose"])
     if result["date"] != day.isoformat():
