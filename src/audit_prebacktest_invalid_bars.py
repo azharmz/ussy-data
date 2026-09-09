@@ -6,6 +6,9 @@ import io
 import json
 import logging
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -31,6 +34,31 @@ def values(row: dict) -> dict:
 
 def compare(stored: dict, provider: dict) -> dict:
     return {field: values(provider)[field] - values(stored)[field] for field in FIELDS}
+
+
+def tiingo_row(symbol: str, day, token: str) -> dict:
+    query = urllib.parse.urlencode({"startDate": day.isoformat(), "endDate": day.isoformat(), "token": token})
+    request = urllib.request.Request(
+        f"https://api.tiingo.com/tiingo/daily/{symbol}/prices?{query}", headers={"User-Agent": "ussy-data-audit/1"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:200].replace(token, "[REDACTED]")
+        raise ValueError(f"Tiingo HTTP {exc.code}: {detail}") from exc
+    if not isinstance(data, list) or len(data) != 1:
+        raise ValueError("Tiingo returned missing or duplicate target date")
+    source = data[0]
+    result = {"date": str(source.get("date", ""))[:10]}
+    for field in FIELDS:
+        result[field] = float(source[field])
+    result["adj_close"] = float(source["adjClose"])
+    if result["date"] != day.isoformat():
+        raise ValueError("Tiingo returned a different date")
+    if issues(result):
+        raise ValueError(f"Tiingo QC rejected bar: {issues(result)}")
+    return result
 
 
 def target_row(frame, target: dict) -> dict:
@@ -66,6 +94,7 @@ def main() -> int:
     logging.disable(logging.CRITICAL)
     try:
         s3, bucket = make_s3_client(), os.environ["R2_BUCKET_NAME"]
+        tiingo_token = os.environ["TIINGO_API_KEY"]
         captured = {}
         for target in TARGETS:
             sid, ticker = target["security_id"], target["ticker"]
@@ -86,29 +115,33 @@ def main() -> int:
                 symbol = yahoo_symbol(ticker, sid)
                 item["provider_request"] = {"symbol": symbol, "start": start, "end": end,
                     "interval": "1d", "auto_adjust": False, "repair": False, "prepost": False}
-                raw = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=False,
-                                  actions=False, repair=False, prepost=False, progress=False, threads=False, timeout=30)
-                raw.to_parquet(out / f"{sid}-yahoo-raw.parquet", index=True)
-                if raw.empty:
-                    raise ValueError("Provider returned no bar")
-                normalized = normalize_history(extract_symbol(raw, symbol, 1), sid, ticker)
-                selected = normalized[pd.to_datetime(normalized["date"], utc=True).dt.date == day]
-                if len(selected) != 1:
-                    raise ValueError("Provider returned missing or duplicate target date")
-                provider = selected.iloc[0].to_dict()
-                provider_issues = issues(provider)
-                item.update(provider_ohlcv=values(provider), provider_qc=provider_issues,
-                            delta_provider_minus_stored=compare(stored, provider),
-                            repair_evidence_confirmed=not provider_issues)
-                item["status"] = "provider_valid" if not provider_issues else "provider_invalid"
+                try:
+                    raw = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=False,
+                                      actions=False, repair=False, prepost=False, progress=False, threads=False, timeout=30)
+                    raw.to_parquet(out / f"{sid}-yahoo-raw.parquet", index=True)
+                    if raw.empty:
+                        raise ValueError("Yahoo returned no bar")
+                    normalized = normalize_history(extract_symbol(raw, symbol, 1), sid, ticker)
+                    selected = normalized[pd.to_datetime(normalized["date"], utc=True).dt.date == day]
+                    if len(selected) != 1:
+                        raise ValueError("Yahoo returned missing or duplicate target date")
+                    provider = selected.iloc[0].to_dict()
+                    item.update(yahoo_ohlcv=values(provider), yahoo_qc=issues(provider),
+                                delta_yahoo_minus_stored=compare(stored, provider))
+                except Exception as exc:
+                    item.update(yahoo_error_type=type(exc).__name__, yahoo_error=str(exc)[:200])
+                tiingo = tiingo_row(ticker, day, tiingo_token)
+                item.update(tiingo_ohlcv=values(tiingo), tiingo_adj_close=float(tiingo["adj_close"]),
+                            tiingo_qc=issues(tiingo), delta_tiingo_minus_stored=compare(stored, tiingo),
+                            repair_evidence_confirmed=True, status="tiingo_valid")
             except Exception as exc:
-                item.update(status="provider_unavailable", error_type=type(exc).__name__,
+                item.update(status="tiingo_unavailable", error_type=type(exc).__name__,
                             error=str(exc)[:200])
             save()
         for key, etag in captured.items():
             if s3.head_object(Bucket=bucket, Key=key)["ETag"] != etag:
                 report["errors"].append({"stage": "atomicity", "key": key, "error": "etag_changed"})
-        report["status"] = "complete" if not report["errors"] and all(x["status"] == "provider_valid" for x in report["targets"]) else "review_required"
+        report["status"] = "complete" if not report["errors"] and all(x["status"] == "tiingo_valid" for x in report["targets"]) else "review_required"
     except Exception as exc:
         report["status"] = "review_required"
         report["errors"].append({"exception_type": type(exc).__name__})

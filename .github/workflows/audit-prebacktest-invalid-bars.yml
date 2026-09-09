@@ -22,12 +22,13 @@ jobs:
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
       - run: python -m unittest discover -s tests
-      - name: Capture R2 and current Yahoo evidence without repair
+      - name: Capture R2, Yahoo, and Tiingo evidence without repair
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
           PYTHONUNBUFFERED: '1'
         run: python src/audit_prebacktest_invalid_bars.py
       - uses: actions/upload-artifact@v7
