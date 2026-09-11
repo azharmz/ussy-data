@@ -1,73 +1,130 @@
-# USSY - status dan panduan melanjutkan
+# USSY Data — project status
 
-> **Handoff terbaru: 4 September 2026 — baca [docs/HANDOFF-2026-09-04.md](docs/HANDOFF-2026-09-04.md) terlebih dahulu.**
-> Bagian di bawah dipertahankan sebagai catatan historis 2 September sebelum repair OHLC dan audit freshness selesai; bukan status terkini. Handoff terbaru mencatat ekspor yang sudah diverifikasi, 18 kandidat tertinggal, perubahan web yang sudah dicommit (publikasi belum dikonfirmasi), dan SPY yang belum diambil.
+> **Status operasional terbaru: 11 September 2026.**  
+> Baca `docs/HANDOFF-2026-09-11.md` sebagai handoff utama. `docs/HANDOFF-2026-09-04.md` tetap disimpan sebagai catatan historis dan tidak lagi menjadi status terkini.
 
-Diperbarui: 2 September 2026. Repo: D:\Stock\Claude\ussy-data.
-Angka R2 di bawah bersumber dari log yang dikirim user, bukan pemeriksaan langsung terbaru.
+Repo: `azharmz/ussy-data`  
+Branch: `main`
 
-## Keputusan tetap
+## Fungsi repo
 
-- Eligibility hanya exact `sharia_compliance == "COMPLIANT"`; kosong/nilai lain dikecualikan.
-- `musaffaHalalRating` disimpan untuk audit, tidak menentukan eligibility.
-- Jangan mengubah label sumber, menghapus histori, atau mengunduh ulang histori bootstrap yang sudah tersedia.
-- Minimum ready saat ini 250 bar, rolling maksimal 300 bar. Ini ambang ketersediaan data, bukan jaminan konvergensi EMA200 atau kesegaran screening.
-- Status perdagangan, identitas ticker dan freshness screening dibedakan dari label compliance.
-- User memakai GitHub Desktop untuk commit/push dan memicu workflow. Web single HTML pada Cloudflare Pages; ringkasan publik pada bucket ussy-data-web, histori utama di bucket ussy-data.
+`ussy-data` adalah data infrastructure bersama untuk proyek-proyek USSY. Tanggung jawab utamanya:
 
-## Hasil terakhir yang dilaporkan
+- membership/universe Musaffa yang dibekukan untuk reproducibility;
+- histori dan update harian OHLCV;
+- rolling dataset;
+- ready-only dataset untuk consumer/backtest;
+- QC dan audit data;
+- benchmark SPY terpisah;
+- read-only web status.
 
-Snapshot membership: 2026-08-28.
-Run follow-up: 33623976189-1.
-Bootstrap: uploaded 1, existing 234, unprocessed 0; tidak ada kegagalan dilaporkan.
+Repo ini adalah source of truth teknis untuk data/pipeline. Consumer strategy seperti Swing atau CAN SLIM tidak boleh mengarang ulang semantics dataset atau meng-hardcode run artifact.
 
-| Status rolling | Jumlah |
+## Baseline produksi terbaru yang terverifikasi
+
+Bukti terakhir: `Production daily OHLCV` run `34563561158`, **success**, 11 September 2026.
+
+| Status | Nilai |
 |---|---:|
-| confirmed_compliant | 1327 |
-| included_in_rolling | 1300 |
-| ready | 1222 |
-| insufficient_history | 78 |
-| data_unavailable | 27 |
-| rolling_rows | 375648 |
+| Membership snapshot | 2026-08-28 |
+| Confirmed compliant | 1327 |
+| Operational securities | 1300 |
+| Histories updated pada run | 1284 |
+| Latest daily market date | 2026-09-10 |
+| Daily rows | 1284 |
+| Rolling rows | 376199 |
+| Ready securities | 1226 |
+| Insufficient history | 74 |
+| Data unavailable | 27 |
+| Ready rows | 367203 |
 
-Readiness dibuat 2026-09-02T11:27:47.687268+00:00.
-Object rolling/readiness berhasil diverifikasi oleh workflow menurut log user.
-Kenaikan 46 rolling rows konsisten dengan histori MBGL yang baru masuk; rincian per-ticker belum dibaca langsung.
+Production manifest: `production/manifests/run-34563561158-1.json`.
 
-Laporan R2:
+Ready pointer resmi: `production/ready/current.json`.
 
-- backtest/manifests/bootstrap/2026-08-28/policy-bootstrap-33623976189-1.json
-- universe/policy_audits/2026-08-28/33623976189-1.json
-- production/rolling/latest.parquet
-- production/rolling/readiness.json
+Ready run terbaru yang dibuktikan oleh workflow:
 
-Export ready terakhir yang lognya dikirim langsung: 2026-09-02T10:35:56.056058+00:00,
-1222 sekuritas, 366074 rows, pointer production/ready/current.json,
-parquet production/ready/runs/1e7fa0c8e0ee47e3b783b22929e52baf.parquet.
-Log tahap export/publish run 33623976189-1 belum diberikan; jangan mengklaim pointer itu sudah diperbarui lagi.
+- `production/ready/runs/bf56bd71a2bb4c4c8f794a0958082238.parquet`
+- SHA-256 `b5e485fad9dd7dab426e39163e98127132c0702089b861ee172787f74ecb93f9`
+- 1226 securities / 367203 rows
 
-## Perbaikan yang sudah dipakai
+**Consumer harus membaca pointer `production/ready/current.json`; jangan hardcode UUID parquet.**
 
-- Provider alias berbasis security ID + ticker: CMPO -> GPGI, PSTG -> P, SCVL -> SHOE, USEG -> BSIN, MBGL WI -> MBGL.
-- Ticker sumber dan security ID Parquet tetap dipertahankan.
-- 27 kasus tertunda dicatat beserta alasan/sumber pada config/bootstrap-policy-2026-08-28.json. Bukan 27 yang persis sama dengan kelompok awal: empat sudah dipulihkan, empat kegagalan baru ditunda.
-- NBY/SDEV perlu review perubahan bisnis dan identitas/screening, IMG berada pada OTC CIMG, SLNO telah diakuisisi, JMG halt/proses delisting. Jangan retry massal kode lama.
-- ESGL tidak dialiaskan ke OIO; snapshot memuat keduanya dengan security ID berbeda. SGN tidak dialiaskan ke AIB. Rekonsiliasi identitas masih terbuka.
-- Optimasi MBGL-only yang belum dipush telah dibatalkan; workflow kembali memproses antrean reviewed dan skip object yang sudah tersedia. Tidak perlu bootstrap lagi untuk pekerjaan yang sudah selesai.
+## SPY benchmark
 
-## Langkah berikutnya
+SPY sekarang sudah terverifikasi tersedia dan bukan lagi sekadar implementasi yang menunggu run.
 
-1. Commit/push dokumentasi status setelah pemeriksaan lokal; tidak perlu trigger bootstrap.
-2. Periksa bahwa tahap export ready dan publish web pada run terakhir hijau. Ini pemeriksaan hasil, bukan permintaan menjalankan ulang.
-3. Biarkan Production daily OHLCV berjalan sesuai jadwal repo: 23:30 UTC Senin-Jumat (07:30 WITA Selasa-Sabtu). Konfigurasi ini bukan bukti run terjadwal terbaru berhasil.
-4. Pada proyek strategi/Colab, baca production/ready/current.json untuk menemukan dataset; jangan hardcode UUID Parquet atau jumlah ready.
-5. Jika pekerjaan dilanjutkan, baca file ini dahulu lalu periksa repo/log terbaru. Jangan ulangi bootstrap atau riset yang sudah selesai tanpa alasan.
+Bukti terakhir: `SPY benchmark history` run `34566034032`, **success**, 11 September 2026.
 
-## Pekerjaan yang belum dinyatakan selesai
+- 89 unit tests: OK
+- rows: 8461
+- first date: 1993-01-29
+- last date: 2026-09-10
+- QC: passed
+- role: `market_benchmark_only`
+- run parquet: `benchmarks/SPY/runs/47b11f071e11417abca7412f9d0e302d.parquet`
 
-- Rekonsiliasi identitas ESGL/OIO dan kasus NBY/SDEV.
-- Bukti earnings dan screening Musaffa benar-benar terbaru; timestamp scrape bukan bukti screening pasca-earnings.
-- Keanggotaan ready masing-masing 13 ticker Swing belum dilaporkan per-ID setelah bootstrap; jangan menyimpulkan hanya dari jumlah agregat.
-- 300 bar rolling dan minimum 250 belum menjamin EMA200 identik dengan perhitungan seluruh histori. Seed, metode dan warm-up indikator perlu ditentukan pada proyek strategi.
+SPY tidak termasuk universe compliant.
 
-Referensi: docs/27-ticker-review-2026-09-02.md dan docs/bootstrap-followup-2026-09-02.md.
+## Workflow produksi saat ini
+
+### Production daily OHLCV
+
+- cron: `0 3 * * 1-5`
+- workflow comment: 10:00 WIB / 11:00 WITA
+- update daily + rolling → export ready → audit recorded earnings freshness → publish web status
+- mempunyai recovery push path bila workflow/updater terkait berubah
+
+### SPY benchmark history
+
+- cron: `45 3 * * 2-6`
+- 03:45 UTC / 11:45 WITA Selasa–Sabtu
+- dijalankan dengan buffer setelah upstream production refresh
+- menjalankan unit tests sebelum update SPY
+- mempunyai recovery push path untuk maintenance/recovery
+
+Workflow lain yang tersedia termasuk universe update, universe freshness audit, pre-backtest gate, invalid-bar audit, dan web-status publish.
+
+## Kebijakan data yang tidak berubah
+
+- Eligibility hanya exact `sharia_compliance == "COMPLIANT"`.
+- `musaffaHalalRating` hanya audit, bukan syarat eligibility.
+- Minimum ready 250 bar; rolling target 300 bar.
+- Compliance, identity, trading status, availability, dan freshness harus dipisahkan.
+- Jangan forward-fill/sintesis harga atau memperbaiki OHLC secara spekulatif.
+- Jangan menghapus histori atau menyambung ticker penerus tanpa verifikasi identity.
+- Audit/diagnosis sebelum repair; hindari mass-redownload tanpa evidence.
+- Fallback/provider alternatif tidak otomatis menjadi kebenaran; repair berbasis evidence alternatif tetap memerlukan review sesuai guardrail repo.
+
+## Caveat penting saat ini
+
+### Membership dan screening freshness
+
+Snapshot membership aktif masih `2026-08-28`.
+
+Audit 11 September memakai `recorded_earnings_date_review_only_v2`, **bukan live earnings feed**. Hasilnya:
+
+- confirmed compliant: 1327
+- live earnings verified: false
+- unknown: 1327
+
+Jadi price data yang fresh sampai 10 September **tidak membuktikan** Musaffa screening sudah diperbarui setelah earnings terbaru.
+
+### Data unavailable
+
+Masih ada 27 securities berstatus `data_unavailable`. Pada production run terbaru, log secara eksplisit memperlihatkan failure Yahoo pada beberapa contoh seperti `EMPG`, `MPX`, `BLD`, dan `PTNM`; jangan menganggap empat nama itu sebagai daftar lengkap 27 kasus.
+
+### Temuan historis 4 September
+
+Daftar 18 kandidat yang saat itu tertinggal tidak boleh dianggap sebagai current stale list. Banyak ticker yang sebelumnya tertinggal sekarang terlihat berhasil diperbarui hingga 2026-09-10. Jika status seluruh 18 diperlukan, jalankan/audit universe freshness terbaru dan nilai evidence saat ini.
+
+Rekonsiliasi identity lama (termasuk ESGL/OIO dan NBY/SDEV) juga tidak otomatis dianggap selesai hanya karena production workflow hijau.
+
+## Prinsip melanjutkan pekerjaan
+
+1. Gunakan `docs/HANDOFF-2026-09-11.md` + HEAD repo sebagai baseline.
+2. Consumer strategy membaca `production/ready/current.json`.
+3. Masalah harga → audit/pre-backtest gate dahulu, lalu repair terbatas jika evidence cukup.
+4. Jangan ulang bootstrap atau repair lama tanpa kebutuhan baru.
+5. Treat universe/compliance freshness dan OHLCV freshness sebagai dua pekerjaan berbeda.
+6. Bila workflow terbaru menghasilkan angka baru, perbarui dokumen status ini berdasarkan bukti run tersebut.
