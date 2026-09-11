@@ -10,6 +10,8 @@ on:
       - '.github/workflows/benchmark-spy.yml'
       - 'src/update_spy.py'
       - 'tests/test_spy.py'
+# A workflow-only commit is an explicit recovery path when a scheduled GitHub Actions tick is delayed or absent.
+# It does not alter SPY data/QC semantics; the same updater and safeguards run below.
 permissions:
   contents: read
 concurrency:
