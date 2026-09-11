@@ -1,9 +1,10 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 import importlib.util
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from update_spy import validate, merge_incremental, IDENTITY, POINTER
+from update_spy import validate, merge_incremental, audit_and_normalize_download, IDENTITY, POINTER
 
 
 @unittest.skipUnless(importlib.util.find_spec('pandas'), 'pandas required')
@@ -57,3 +58,23 @@ class SPYTests(unittest.TestCase):
         new['date'] = self.pd.Timestamp('2026-09-03')
         with self.assertRaises(ValueError): merge_incremental(self.old, new)
         with self.assertRaises(ValueError): validate(self.pd.concat([self.old, self.old]))
+
+    def test_incomplete_yahoo_row_is_audited_then_discarded(self):
+        pd = self.pd
+        raw = pd.DataFrame(
+            {
+                'Open': [100., 101., 102.],
+                'High': [102., float('nan'), 104.],
+                'Low': [99., 100., 101.],
+                'Close': [101., 102., 103.],
+                'Adj Close': [100., 101., 102.],
+                'Volume': [1000, 1100, 1200],
+            },
+            index=pd.DatetimeIndex(['2026-09-08', '2026-09-09', '2026-09-10'], name='Date'),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            normalized, dropped, valid = audit_and_normalize_download(raw, Path(tmp))
+            self.assertEqual(dropped, 1)
+            self.assertEqual(valid, 2)
+            self.assertEqual(len(normalized), 2)
+            self.assertTrue((Path(tmp) / 'discarded-incomplete-source-rows.csv').exists())
