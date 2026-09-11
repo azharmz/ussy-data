@@ -15,6 +15,7 @@ POINTER = 'benchmarks/SPY/current.json'
 PREFIX = 'benchmarks/SPY/runs/'
 IDENTITY = 'benchmark:SPY'
 COLS = ['date', 'security_id', 'ticker', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+REQUIRED_SOURCE = ['date', 'open', 'high', 'low', 'close']
 
 
 def validate(frame):
@@ -50,10 +51,53 @@ def merge_incremental(old, new):
     return result
 
 
+def audit_and_normalize_download(raw, out):
+    """Normalize Yahoo rows while making any discarded incomplete rows explicit.
+
+    Yahoo can occasionally include a placeholder/incomplete daily row. Such a row is
+    not a usable market bar and may be discarded, but only after it is recorded.
+    Duplicate valid dates or unexplained row loss still stop publication.
+    """
+    import pandas as pd
+    from bootstrap_ohlcv import normalize_history
+
+    flat = raw.copy()
+    if isinstance(flat.columns, pd.MultiIndex):
+        if 'SPY' not in flat.columns.get_level_values(1):
+            raise ValueError('Unexpected Yahoo column layout')
+        flat = flat.xs('SPY', axis=1, level=1)
+    source = flat.reset_index().rename(columns={
+        'Date': 'date', 'Datetime': 'date', 'Open': 'open', 'High': 'high',
+        'Low': 'low', 'Close': 'close', 'Adj Close': 'adj_close', 'Volume': 'volume',
+    })
+    missing = set(REQUIRED_SOURCE) - set(source.columns)
+    if missing:
+        raise ValueError(f'Missing Yahoo SPY columns: {sorted(missing)}')
+
+    source['date'] = pd.to_datetime(source['date'], errors='coerce', utc=True)
+    numeric = source.copy()
+    for column in ['open', 'high', 'low', 'close']:
+        numeric[column] = pd.to_numeric(numeric[column], errors='coerce')
+    valid_mask = numeric[REQUIRED_SOURCE].notna().all(axis=1)
+    dropped = source.loc[~valid_mask].copy()
+    if not dropped.empty:
+        dropped.to_csv(out / 'discarded-incomplete-source-rows.csv', index=False)
+    valid_source = source.loc[valid_mask].copy()
+    if valid_source['date'].duplicated().any():
+        raise ValueError('Yahoo returned duplicate valid SPY dates')
+
+    new = normalize_history(flat, IDENTITY, 'SPY')
+    if len(new) != len(valid_source):
+        raise ValueError(
+            f'Normalization changed valid-row count: source_valid={len(valid_source)} normalized={len(new)}'
+        )
+    return new, int(len(dropped)), int(len(valid_source))
+
+
 def main():
     import pandas as pd
     import yfinance as yf
-    from bootstrap_ohlcv import make_s3_client, normalize_history
+    from bootstrap_ohlcv import make_s3_client
     out = Path('diagnostics/spy')
     out.mkdir(parents=True, exist_ok=False)
     report = {'started_at': datetime.now(UTC).isoformat(), 'status': 'checking_existing',
@@ -113,16 +157,12 @@ def main():
         save()
         raw = yf.download('SPY', **params)
         raw.to_parquet(out / 'source-refetch.parquet')
-        if isinstance(raw.columns, pd.MultiIndex):
-            if 'SPY' not in raw.columns.get_level_values(1):
-                raise ValueError('Unexpected Yahoo column layout')
-            raw = raw.xs('SPY', axis=1, level=1)
-        if raw.empty or 'Adj Close' not in raw:
-            raise ValueError('Source empty or adjusted close absent; cannot assume basis')
-        new = normalize_history(raw, IDENTITY, 'SPY')
-        if len(new) != len(raw):
-            raise ValueError('Normalization dropped rows; source requires review')
-        validate(new)
+        if raw.empty:
+            raise ValueError('Source empty')
+        new, discarded_rows, source_valid_rows = audit_and_normalize_download(raw, out)
+        report.update(source_rows=int(len(raw)), source_valid_rows=source_valid_rows,
+                      discarded_incomplete_source_rows=discarded_rows)
+        save()
         result = new if old is None else merge_incremental(old, new)
         if old is not None and result.equals(old[COLS].sort_values('date').reset_index(drop=True)):
             report.update(status='unchanged', rows=len(old), last_date=str(old.date.max()))
@@ -139,6 +179,7 @@ def main():
             columns=COLS, adjustment_policy='yahoo_auto_adjust_false_adj_close_separate_v1',
             adjustment_note='OHLC as provided by Yahoo with auto_adjust=False; not manually adjusted. Adj Close separate. Not a guarantee of split-unadjusted historical prices.',
             source='yfinance/Yahoo Finance', fetch_parameters=params, versions=report['versions'],
+            discarded_incomplete_source_rows=discarded_rows,
             previous_parquet_key=pointer['parquet_key'] if pointer else None,
             previous_pointer=pointer, qc='passed', currency='USD')
         manifest['dtypes'] = {c: str(result[c].dtype) for c in COLS}
