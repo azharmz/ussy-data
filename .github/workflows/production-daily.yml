@@ -18,6 +18,16 @@ on:
   schedule:
     # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
     - cron: "0 3 * * 1-5"
+  # Recovery path: a workflow/updater maintenance commit can immediately validate production
+  # instead of waiting for the next cron tick. Strategy semantics are not changed by this trigger.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-daily.yml'
+      - 'src/update_production.py'
+      - 'src/export_ready.py'
+      - 'src/audit_screening_freshness.py'
+      - 'src/publish_web_status.py'
 
 permissions:
   contents: read
@@ -72,4 +82,3 @@ jobs:
 
       - name: Publish read-only web status
         run: python src/publish_web_status.py
-
