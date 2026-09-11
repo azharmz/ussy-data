@@ -2,7 +2,8 @@ name: SPY benchmark history
 on:
   workflow_dispatch:
   schedule:
-    - cron: '45 23 * * 1-5'
+    # 03:45 UTC Tue-Sat: after the upstream production OHLCV refresh and with a larger Yahoo EOD-settlement buffer.
+    - cron: '45 3 * * 2-6'
   push:
     branches: [main]
     paths:
