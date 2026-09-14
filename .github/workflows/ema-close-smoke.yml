@@ -37,3 +37,5 @@ jobs:
         run: python src/publish_ema_close_state.py
       - name: Validate and promote close-basis EMA state
         run: python src/verify_ema_close_equivalence.py --all-if-bootstrap --sample-size 50
+
+# Branch smoke only; no Yahoo/update_production invocation.
