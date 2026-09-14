@@ -99,12 +99,6 @@ jobs:
       - name: Validate and promote shared adjusted EMA state
         run: python src/verify_ema_equivalence.py --all-if-bootstrap --sample-size 50
 
-      - name: Build non-production close-basis EMA candidate
-        run: python src/publish_ema_close_state.py
-
-      - name: Validate and promote shared close-basis EMA state
-        run: python src/verify_ema_close_equivalence.py --all-if-bootstrap --sample-size 50
-
       - name: Audit recorded earnings freshness for active compliant universe
         run: python src/audit_screening_freshness.py --snapshot-date current
 
