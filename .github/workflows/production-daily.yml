@@ -18,22 +18,16 @@ on:
   schedule:
     # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
     - cron: "0 3 * * 1-5"
-  # Recovery path: a workflow/updater maintenance commit can immediately validate production
-  # instead of waiting for the next cron tick. Strategy semantics are not changed by this trigger.
+  # Recovery path for the upstream production-data pipeline only.
+  # EMA code changes have their own lightweight smoke workflow and must not trigger Yahoo refresh.
   push:
     branches: [main]
     paths:
       - '.github/workflows/production-daily.yml'
       - 'src/update_production.py'
       - 'src/export_ready.py'
-      - 'src/ema_state.py'
-      - 'src/load_ema_state.py'
-      - 'src/publish_ema_state.py'
-      - 'src/verify_ema_equivalence.py'
       - 'src/audit_screening_freshness.py'
       - 'src/publish_web_status.py'
-      - 'tests/test_ema_state.py'
-      - 'tests/test_ema_loader.py'
 
 permissions:
   contents: read
