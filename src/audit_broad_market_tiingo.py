@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import sys
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -19,12 +20,12 @@ from typing import Any
 
 import pandas as pd
 
-try:
-    from audit_tiingo import fetch as fetch_tiingo
-    from bootstrap_ohlcv import make_s3_client
-except ModuleNotFoundError:
-    from src.audit_tiingo import fetch as fetch_tiingo
-    from src.bootstrap_ohlcv import make_s3_client
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from audit_tiingo import fetch as fetch_tiingo
+from bootstrap_ohlcv import make_s3_client
 
 VERSION = "54-cycle1-broad-market-tiingo-audit-v1"
 MEMBERSHIP_POINTER = "market/membership/official.json"
