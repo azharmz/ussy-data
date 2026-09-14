@@ -5,13 +5,19 @@
 ## R2 layout
 
 ```text
+validation/
+└── indicators/
+    └── ema/
+        ├── run-<github_run_id>-<attempt>.parquet
+        └── run-<github_run_id>-<attempt>.json
+
 production/
 ├── ready/
 └── indicators/
     └── ema/
         ├── current.json
         └── runs/
-            └── <uuid>.parquet
+            └── run-<github_run_id>-<attempt>.parquet
 ```
 
 `production/ready/` remains the rolling OHLCV contract and is not changed by EMA publication.
@@ -41,6 +47,30 @@ After bootstrap, persisted EMA state is advanced only with ready bars newer than
 
 The publisher does not recompute EMA from the rolling 300-bar ready window. If persisted state is missing, outside the current ready window, has a price disagreement with the ready source, or otherwise cannot be trusted, that security is rebuilt from full history instead of continuing recursively. A corrupt EMA manifest/parquet fails closed.
 
+## Frozen promotion governance
+
+The production contract is governed by this exact order:
+
+```text
+full history + ready
+        ↓
+compute candidate EMA state
+        ↓
+write validation/indicators/ema candidate
+        ↓
+equivalence validation vs long-history reference
+        ↓ PASS
+write immutable production/indicators/ema/runs artifact
+        ↓
+promote production/indicators/ema/current.json LAST
+```
+
+A failed candidate never becomes production-approved. `production/indicators/ema/current.json` must remain unchanged if equivalence validation fails, lineage changes while validation is running, immutable production upload verification fails, or any pre-promotion guardrail fails.
+
+Candidate artifacts belong under `validation/indicators/ema/` and are explicitly non-production. Downstream consumers must never read candidate artifacts.
+
+The immutable production object is written only after equivalence PASS. The production pointer is the final write because changing `current.json` is the semantic act of approving a state for downstream consumption.
+
 ## Manifest contract
 
 `production/indicators/ema/current.json` schema version 1 includes at least:
@@ -57,9 +87,7 @@ The publisher does not recompute EMA from the rolling 300-bar ready window. If p
 - `source_ready_created_at`
 - `update_method`
 
-It also carries `security_ids`, bootstrap/recursive/rebuild counters, and min/max state dates for auditability.
-
-Publication order is immutable run first, verification second, pointer last. The ready pointer ETag is rechecked immediately before publishing the EMA pointer; if ready changes concurrently, the EMA immutable object is left unpointed and the run fails safely.
+It also carries `security_ids`, bootstrap/recursive/rebuild counters, min/max state dates, equivalence result, candidate lineage, and promotion policy for auditability.
 
 ## Loader contract
 
@@ -67,12 +95,19 @@ Use `src/load_ema_state.py`. The loader verifies schema version, periods, price 
 
 ## Equivalence gate
 
-`src/verify_ema_equivalence.py` recalculates EMA from full history and compares persisted values with tight numerical tolerances. On a bootstrap/rebuild run, production verifies the full EMA universe. On ordinary recursive runs it verifies a deterministic sample. Trend classification uses three states for equivalence checking only: `STACKED_UP`, `STACKED_DOWN`, and `MIXED`; classification mismatch is a hard failure.
+Equivalence recalculates EMA from full history and compares the candidate values with tight numerical tolerances. On a bootstrap/rebuild run, validation covers the full EMA universe. On ordinary recursive runs it may use a deterministic sample. Trend classification uses three states for equivalence checking only: `STACKED_UP`, `STACKED_DOWN`, and `MIXED`; classification mismatch is a hard failure.
+
+The first full bootstrap validation on 14 September 2026 covered 1,226 securities and produced max absolute error 0.0, max relative error 0.0, zero classification mismatches, and zero numeric failures. That run used the earlier publish-before-validate ordering, so its numerical result is evidence for the EMA formula but not evidence that the old promotion sequence satisfies this frozen governance.
 
 This classification is a QA device, not a trading signal contract.
 
+## Workflow roles
+
+- `ema-state-smoke.yml` uses existing R2 history/ready and must not run Yahoo. During implementation validation it may stop at candidate generation until the promotion gate is fully installed.
+- `production-daily.yml` remains the normal EOD pipeline. EMA integration may be enabled only after the candidate → equivalence → production immutable → pointer-last flow has passed smoke validation end-to-end.
+
 ## Downstream use
 
-CAN SLIM, SEPA, TrendFoll, signal-model, and other consumers may load this shared state. No downstream project should mutate the EMA pointer or assume a specific immutable UUID. Read `production/indicators/ema/current.json` and validate through the loader.
+CAN SLIM, SEPA, TrendFoll, signal-model, and other consumers may load the shared production EMA state once the promotion gate is production-enabled. No downstream project should mutate the EMA pointer or assume a specific immutable run key. Read `production/indicators/ema/current.json` and validate through the loader.
 
 SMA remains intentionally non-persistent because it can be calculated exactly from the rolling ready dataset.
