@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import numpy as np
@@ -18,6 +19,7 @@ from load_ema_close_state import PROMOTION_POLICY
 CANDIDATE_PREFIX = "validation/indicators/ema-close/"
 PRODUCTION_PREFIX = "production/indicators/ema-close/runs/"
 POINTER_KEY = "production/indicators/ema-close/current.json"
+MAX_WORKERS = 16
 
 
 def parse_args():
@@ -47,36 +49,43 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
     verify_all = args.all_if_bootstrap and (manifest.get("bootstrap_count", 0) > 0 or manifest.get("rebuild_count", 0) > 0)
     selected = ids if verify_all else ids[: min(args.sample_size, len(ids))]
     state_by_id = state.set_index("security_id")
-    max_abs = 0.0
-    max_rel = 0.0
-    mismatches = 0
-    failures = []
-    for security_id in selected:
+
+    def check(security_id: str):
         reference = bootstrap_state(history(s3, bucket, security_id), security_id)
         persisted = state_by_id.loc[security_id]
+        failures = []
+        mismatch = 0
+        max_abs = 0.0
+        max_rel = 0.0
         if pd.Timestamp(reference["as_of_date"]).normalize() != pd.Timestamp(persisted["as_of_date"]).normalize():
             failures.append(f"{security_id}: as_of_date mismatch")
-            continue
+            return max_abs, max_rel, mismatch, failures
         if classify_trend(reference) != classify_trend(persisted):
-            mismatches += 1
+            mismatch = 1
         for field in ["last_price", *(f"ema{p}" for p in PERIODS)]:
             ref = float(reference[field]); got = float(persisted[field])
             diff = abs(got - ref); rel = diff / abs(ref) if ref else diff
             max_abs = max(max_abs, diff); max_rel = max(max_rel, rel)
             if not np.isclose(got, ref, rtol=args.rtol, atol=args.atol):
                 failures.append(f"{security_id}: {field} persisted={got:.12g} reference={ref:.12g}")
+        return max_abs, max_rel, mismatch, failures
+
+    max_abs = 0.0; max_rel = 0.0; mismatches = 0; failures = []
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(selected))) as pool:
+        for abs_err, rel_err, mismatch, local_failures in pool.map(check, selected):
+            max_abs = max(max_abs, abs_err); max_rel = max(max_rel, rel_err)
+            mismatches += mismatch; failures.extend(local_failures)
+
     report = {
-        "verified": len(selected),
-        "mode": "all" if verify_all else "sample",
-        "rtol": args.rtol,
-        "atol": args.atol,
-        "max_abs_error": max_abs,
-        "max_relative_error": max_rel,
-        "classification_mismatches": mismatches,
+        "verified": len(selected), "mode": "all" if verify_all else "sample",
+        "rtol": args.rtol, "atol": args.atol, "max_abs_error": max_abs,
+        "max_relative_error": max_rel, "classification_mismatches": mismatches,
         "numeric_failures": len(failures),
     }
     print(json.dumps(report, indent=2))
     if failures or mismatches:
+        for failure in failures[:20]:
+            print(f"::error title=EMA close equivalence failure::{failure}")
         raise RuntimeError("EMA close equivalence failed; production pointer unchanged")
     return report
 
@@ -87,26 +96,15 @@ def promoted_manifest(candidate: dict, production_key: str, digest: str, equival
     if candidate.get("price_basis") != PRICE_BASIS or candidate.get("periods") != list(PERIODS):
         raise ValueError("EMA close candidate contract mismatch")
     return {
-        "schema_version": 1,
-        "created_at": datetime.now(UTC).isoformat(),
-        "price_basis": PRICE_BASIS,
-        "periods": list(PERIODS),
-        "securities": candidate["securities"],
-        "security_ids": candidate["security_ids"],
-        "parquet_key": production_key,
-        "sha256": digest,
-        "source_ready_parquet_key": candidate["source_ready_parquet_key"],
-        "source_ready_sha256": candidate["source_ready_sha256"],
-        "source_ready_created_at": candidate.get("source_ready_created_at"),
-        "update_method": candidate["update_method"],
-        "bootstrap_count": candidate.get("bootstrap_count", 0),
-        "recursive_count": candidate.get("recursive_count", 0),
-        "unchanged_count": candidate.get("unchanged_count", 0),
-        "rebuild_count": candidate.get("rebuild_count", 0),
-        "as_of_date_min": candidate["as_of_date_min"],
-        "as_of_date_max": candidate["as_of_date_max"],
-        "equivalence": equivalence,
-        "promotion_policy": PROMOTION_POLICY,
+        "schema_version": 1, "created_at": datetime.now(UTC).isoformat(), "price_basis": PRICE_BASIS,
+        "periods": list(PERIODS), "securities": candidate["securities"], "security_ids": candidate["security_ids"],
+        "parquet_key": production_key, "sha256": digest,
+        "source_ready_parquet_key": candidate["source_ready_parquet_key"], "source_ready_sha256": candidate["source_ready_sha256"],
+        "source_ready_created_at": candidate.get("source_ready_created_at"), "update_method": candidate["update_method"],
+        "bootstrap_count": candidate.get("bootstrap_count", 0), "recursive_count": candidate.get("recursive_count", 0),
+        "unchanged_count": candidate.get("unchanged_count", 0), "rebuild_count": candidate.get("rebuild_count", 0),
+        "as_of_date_min": candidate["as_of_date_min"], "as_of_date_max": candidate["as_of_date_max"],
+        "equivalence": equivalence, "promotion_policy": PROMOTION_POLICY,
         "candidate_manifest_key": candidate.get("candidate_manifest_key"),
     }
 
