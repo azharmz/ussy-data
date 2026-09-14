@@ -9,6 +9,7 @@ from ema_state import PERIODS, PRICE_BASIS, validate_state_frame
 
 EMA_POINTER_KEY = "production/indicators/ema/current.json"
 EMA_RUN_PREFIX = "production/indicators/ema/runs/"
+PROMOTION_POLICY = "candidate_then_equivalence_then_immutable_run_then_current_pointer_last_v1"
 
 
 def load_ema_state(s3, bucket):
@@ -26,14 +27,23 @@ def load_ema_state(s3, bucket):
     required = {
         "schema_version", "created_at", "price_basis", "periods", "securities",
         "parquet_key", "sha256", "source_ready_parquet_key", "source_ready_sha256",
-        "update_method",
+        "update_method", "promotion_policy", "equivalence",
     }
     if not required.issubset(manifest):
-        raise ValueError("EMA manifest lacks required fields")
+        raise ValueError("EMA manifest lacks required promotion evidence")
     if manifest["schema_version"] != 1 or manifest["price_basis"] != PRICE_BASIS:
         raise ValueError("Invalid EMA manifest schema/price basis")
     if list(manifest["periods"]) != list(PERIODS) or not key.startswith(EMA_RUN_PREFIX):
         raise ValueError("Invalid EMA periods/parquet key")
+    if manifest["promotion_policy"] != PROMOTION_POLICY:
+        raise ValueError("EMA manifest promotion policy is not approved")
+    equivalence = manifest.get("equivalence")
+    if not isinstance(equivalence, dict):
+        raise ValueError("EMA manifest equivalence evidence is invalid")
+    if equivalence.get("numeric_failures") != 0 or equivalence.get("classification_mismatches") != 0:
+        raise ValueError("EMA manifest equivalence gate did not pass")
+    if not isinstance(equivalence.get("verified"), int) or equivalence["verified"] < 1:
+        raise ValueError("EMA manifest equivalence coverage is invalid")
     body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     if hashlib.sha256(body).hexdigest() != manifest["sha256"]:
         raise ValueError("EMA Parquet checksum mismatch")
