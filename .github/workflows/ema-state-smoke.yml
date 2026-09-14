@@ -7,10 +7,13 @@ on:
     paths:
       - '.github/workflows/ema-state-smoke.yml'
       - 'src/ema_state.py'
+      - 'src/ema_promotion.py'
       - 'src/load_ema_state.py'
       - 'src/publish_ema_state.py'
+      - 'src/verify_ema_equivalence.py'
       - 'tests/test_ema_state.py'
       - 'tests/test_ema_loader.py'
+      - 'tests/test_ema_promotion.py'
       - 'docs/EMA-STATE.md'
 
 permissions:
@@ -50,5 +53,5 @@ jobs:
       - name: Build non-production EMA candidate from existing ready/history
         run: python src/publish_ema_state.py
 
-      # Promotion intentionally disabled until the candidate equivalence promoter
-      # is committed. This workflow must not touch production/indicators/ema/current.json.
+      - name: Equivalence gate and promote pointer last
+        run: python src/verify_ema_equivalence.py --all-if-bootstrap --sample-size 50
