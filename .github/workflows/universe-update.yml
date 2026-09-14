@@ -2,8 +2,18 @@ name: Update Musaffa universe
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * 1-5'
+    inputs:
+      snapshot_date:
+        description: Snapshot date or latest complete file set
+        required: true
+        default: "latest"
+  push:
+    branches:
+      - main
+    paths:
+      - "universe/musaffa_snapshot_*.json"
+      - "universe/musaffa_security_master_*.json"
+      - "universe/musaffa_membership_*.json"
 
 permissions:
   contents: read
@@ -13,22 +23,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-universe:
+  update:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-      PYTHONUNBUFFERED: '1'
+      PYTHONUNBUFFERED: "1"
+
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
           cache: pip
-      - run: python -m pip install --disable-pip-version-check -r requirements.txt
-      - run: python -m unittest discover -s tests
-      - name: Update Musaffa universe snapshot
-        run: python src/update_universe.py
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Validate, publish, and compare universe
+        id: universe
+        env:
+          REQUESTED_DATE: ${{ inputs.snapshot_date || 'latest' }}
+        run: python src/update_universe.py --snapshot-date "${REQUESTED_DATE}"
+
+      - name: Audit screening freshness against earnings dates
+        run: python src/audit_screening_freshness.py --snapshot-date "${{ steps.universe.outputs.snapshot_date }}"
+
+      - name: Bootstrap ADDED securities
+        run: python src/bootstrap_added.py --snapshot-date "${{ steps.universe.outputs.snapshot_date }}" --request-delay 3.0
+
+      - name: Rebuild rolling for active membership
+        run: |
+          python src/build_rolling.py \
+            --snapshot-date "${{ steps.universe.outputs.snapshot_date }}" \
+            --rolling-bars 300 \
+            --minimum-ready-bars 250
+
+      - name: Export ready-only strategy data
+        run: python src/export_ready.py
