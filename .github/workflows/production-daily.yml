@@ -18,12 +18,11 @@ on:
   schedule:
     # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
     - cron: "0 3 * * 1-5"
-  # Recovery path for the upstream production-data pipeline only.
-  # EMA code changes use lightweight smoke workflows and do not trigger Yahoo refresh.
+  # Recovery path for upstream production-data code changes only.
+  # Workflow-only / EMA maintenance must not trigger a Yahoo refresh.
   push:
     branches: [main]
     paths:
-      - '.github/workflows/production-daily.yml'
       - 'src/bootstrap_missing_ohlcv.py'
       - 'tests/test_bootstrap_missing_ohlcv.py'
       - 'src/update_production.py'
@@ -98,12 +97,6 @@ jobs:
 
       - name: Validate and promote shared adjusted EMA state
         run: python src/verify_ema_equivalence.py --all-if-bootstrap --sample-size 50
-
-      - name: Build non-production close-basis EMA candidate
-        run: python src/publish_ema_close_state.py
-
-      - name: Validate and promote shared close-basis EMA state
-        run: python src/verify_ema_close_equivalence.py --all-if-bootstrap --sample-size 50
 
       - name: Audit recorded earnings freshness for active compliant universe
         run: python src/audit_screening_freshness.py --snapshot-date current
