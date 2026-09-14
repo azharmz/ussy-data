@@ -2,12 +2,29 @@ name: Production daily OHLCV
 
 on:
   workflow_dispatch:
+    inputs:
+      snapshot_date:
+        description: Active Musaffa membership snapshot date or current
+        required: true
+        default: "current"
+      request_delay:
+        description: Delay between Yahoo batches in seconds
+        required: true
+        default: "10.0"
+      batch_size:
+        description: Yahoo tickers per controlled batch
+        required: true
+        default: "10"
   schedule:
-    - cron: '0 3 * * 1-5'
+    # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
+    - cron: "0 3 * * 1-5"
+  # Recovery path for upstream production-data code changes only.
+  # Workflow-only / EMA maintenance must not trigger a Yahoo refresh.
   push:
     branches: [main]
     paths:
-      - '.github/workflows/production-daily.yml'
+      - 'src/bootstrap_missing_ohlcv.py'
+      - 'tests/test_bootstrap_missing_ohlcv.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
       - 'src/audit_screening_freshness.py'
@@ -21,35 +38,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  production-daily:
+  update:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-      TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
-      PYTHONUNBUFFERED: '1'
+      PYTHONUNBUFFERED: "1"
+
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
           cache: pip
-      - run: python -m pip install --disable-pip-version-check -r requirements.txt
-      - run: python -m unittest discover -s tests
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests
+
       - name: Onboard missing full histories for new universe members
-        run: python src/bootstrap_missing_ohlcv.py
+        shell: bash
+        env:
+          SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
+        run: |
+          python src/bootstrap_missing_ohlcv.py \
+            --snapshot-date "${SNAPSHOT_DATE}" \
+            --max-new-members 50 \
+            --max-retries 3 \
+            --request-delay 2.0
+
       - name: Update daily and rolling OHLCV
-        run: python src/update_production.py
+        shell: bash
+        env:
+          SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
+          REQUEST_DELAY: ${{ inputs.request_delay || '10.0' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '10' }}
+        run: |
+          python src/update_production.py \
+            --snapshot-date "${SNAPSHOT_DATE}" \
+            --rolling-bars 300 \
+            --minimum-ready-bars 250 \
+            --batch-size "${BATCH_SIZE}" \
+            --request-delay "${REQUEST_DELAY}"
+
       - name: Export ready-only strategy data
         run: python src/export_ready.py
-      - name: Build non-production EMA candidate
+
+      - name: Build non-production adjusted EMA candidate
         run: python src/publish_ema_state.py
-      - name: Validate and promote shared EMA state
+
+      - name: Validate and promote shared adjusted EMA state
         run: python src/verify_ema_equivalence.py --all-if-bootstrap --sample-size 50
+
       - name: Audit recorded earnings freshness for active compliant universe
-        run: python src/audit_screening_freshness.py
+        run: python src/audit_screening_freshness.py --snapshot-date current
+
       - name: Publish read-only web status
         run: python src/publish_web_status.py
