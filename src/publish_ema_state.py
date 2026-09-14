@@ -1,8 +1,7 @@
-"""Publish shared EMA state to R2 from ready data plus persisted recursive state.
+"""Compute and persist a non-production EMA candidate.
 
-Bootstrap uses full per-security history once. Subsequent runs advance from the
-persisted EMA state using only newer ready bars. The immutable Parquet is written
-and verified before current.json is replaced.
+This script NEVER changes production/indicators/ema/current.json and NEVER writes
+under production/indicators/ema/runs/. Promotion is owned by the equivalence gate.
 """
 from __future__ import annotations
 
@@ -11,17 +10,28 @@ import io
 import json
 import os
 from datetime import UTC, datetime
-from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 
 from bootstrap_ohlcv import make_s3_client
 from ema_state import PERIODS, PRICE_BASIS, StateNeedsRebuild, advance_state, bootstrap_state, validate_state_frame
-from load_ema_state import EMA_POINTER_KEY, EMA_RUN_PREFIX, load_ema_state
+from load_ema_state import load_ema_state
 from load_ready import load_ready
 
 UPDATE_METHOD = "long_history_bootstrap_then_recursive_persisted_state_v1"
+CANDIDATE_PREFIX = "validation/indicators/ema/"
+
+
+def candidate_id() -> str:
+    run_id = os.getenv("GITHUB_RUN_ID", "local")
+    attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+    return f"run-{run_id}-{attempt}"
+
+
+def candidate_keys() -> tuple[str, str]:
+    base = f"{CANDIDATE_PREFIX}{candidate_id()}"
+    return f"{base}.parquet", f"{base}.json"
 
 
 def _read_full_history(s3, bucket: str, security_id: str) -> pd.DataFrame:
@@ -65,14 +75,10 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
             rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
             counters["bootstrap"] += 1
             continue
-        prior_dict = prior._asdict()
         try:
-            row, advanced = advance_state(prior_dict, ready_rows)
+            row, advanced = advance_state(prior._asdict(), ready_rows)
             rows.append(row)
-            if advanced:
-                counters["recursive"] += 1
-            else:
-                counters["unchanged"] += 1
+            counters["recursive" if advanced else "unchanged"] += 1
         except StateNeedsRebuild:
             rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
             counters["rebuild"] += 1
@@ -93,48 +99,40 @@ def main() -> None:
     ready, ready_manifest = load_ready(s3, bucket)
     observed_ready, ready_etag = _read_ready_pointer_with_etag(s3, bucket)
     if observed_ready != ready_manifest:
-        raise RuntimeError("Ready pointer changed while EMA publisher was loading source data")
+        raise RuntimeError("Ready pointer changed while EMA candidate was loading source data")
 
     previous = None
-    previous_manifest = None
     try:
-        previous, previous_manifest = load_ema_state(s3, bucket)
+        previous, _ = load_ema_state(s3, bucket)
     except FileNotFoundError:
         pass
-
-    if previous_manifest and (
-        previous_manifest.get("source_ready_parquet_key") == ready_manifest["parquet_key"]
-        and previous_manifest.get("source_ready_sha256") == ready_manifest["sha256"]
-        and set(previous["security_id"]) == set(map(str, ready_manifest["security_ids"]))
-    ):
-        print(json.dumps({"status": "already_current", "parquet_key": previous_manifest["parquet_key"], "securities": len(previous)}, indent=2))
-        return
 
     state, counters = build_state(s3, bucket, ready, previous)
     buffer = io.BytesIO()
     state.to_parquet(buffer, engine="pyarrow", index=False, compression="zstd")
     body = buffer.getvalue()
     digest = hashlib.sha256(body).hexdigest()
-    run_key = f"{EMA_RUN_PREFIX}{uuid4().hex}.parquet"
+    parquet_key, manifest_key = candidate_keys()
 
-    s3.put_object(Bucket=bucket, Key=run_key, Body=body, ContentType="application/vnd.apache.parquet")
-    uploaded = s3.get_object(Bucket=bucket, Key=run_key)["Body"].read()
+    s3.put_object(Bucket=bucket, Key=parquet_key, Body=body, ContentType="application/vnd.apache.parquet")
+    uploaded = s3.get_object(Bucket=bucket, Key=parquet_key)["Body"].read()
     if len(uploaded) != len(body) or hashlib.sha256(uploaded).hexdigest() != digest:
-        raise RuntimeError("EMA immutable run verification failed")
+        raise RuntimeError("EMA candidate verification failed")
 
     if s3.head_object(Bucket=bucket, Key="production/ready/current.json")["ETag"] != ready_etag:
-        raise RuntimeError("Ready pointer changed before EMA publish; immutable EMA run left unpointed")
+        raise RuntimeError("Ready pointer changed before EMA candidate completed; candidate left unpromoted")
 
     as_of = pd.to_datetime(state["as_of_date"])
     manifest = {
         "schema_version": 1,
-        "created_at": datetime.now(UTC).isoformat(),
+        "candidate_created_at": datetime.now(UTC).isoformat(),
+        "status": "CANDIDATE_NOT_PRODUCTION_APPROVED",
         "price_basis": PRICE_BASIS,
         "periods": list(PERIODS),
         "securities": len(state),
         "security_ids": state["security_id"].tolist(),
-        "parquet_key": run_key,
-        "sha256": digest,
+        "candidate_parquet_key": parquet_key,
+        "candidate_sha256": digest,
         "source_ready_parquet_key": ready_manifest["parquet_key"],
         "source_ready_sha256": ready_manifest["sha256"],
         "source_ready_created_at": ready_manifest.get("created_at"),
@@ -146,7 +144,7 @@ def main() -> None:
         "as_of_date_min": as_of.min().date().isoformat(),
         "as_of_date_max": as_of.max().date().isoformat(),
     }
-    s3.put_object(Bucket=bucket, Key=EMA_POINTER_KEY, Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
+    s3.put_object(Bucket=bucket, Key=manifest_key, Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
     print(json.dumps({k: v for k, v in manifest.items() if k != "security_ids"}, indent=2))
 
 
