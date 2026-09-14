@@ -1,0 +1,39 @@
+name: EMA close state smoke
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [feature/shared-ema-close]
+    paths:
+      - 'src/ema_close_state.py'
+      - 'src/load_ema_close_state.py'
+      - 'src/publish_ema_close_state.py'
+      - 'src/verify_ema_close_equivalence.py'
+      - '.github/workflows/ema-close-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run existing unit tests
+        run: python -m unittest discover -s tests
+      - name: Build non-production close-basis EMA candidate
+        run: python src/publish_ema_close_state.py
+      - name: Validate and promote close-basis EMA state
+        run: python src/verify_ema_close_equivalence.py --all-if-bootstrap --sample-size 50
