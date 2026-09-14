@@ -10,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from ema_state import PERIODS, bootstrap_state
-from load_ema_state import EMA_POINTER_KEY, load_ema_state
+from load_ema_state import EMA_POINTER_KEY, PROMOTION_POLICY, load_ema_state
 
 
 class FakeBody:
@@ -51,21 +51,46 @@ class EMALoaderTests(unittest.TestCase):
             "source_ready_parquet_key": "production/ready/runs/source.parquet",
             "source_ready_sha256": "abc",
             "update_method": "test",
+            "promotion_policy": PROMOTION_POLICY,
+            "equivalence": {
+                "verified": 1,
+                "numeric_failures": 0,
+                "classification_mismatches": 0,
+            },
         }
         return {EMA_POINTER_KEY: json.dumps(manifest).encode(), key: body}, key, state
 
-    def test_loads_valid_state(self):
+    def test_loads_valid_promoted_state(self):
         objects, _, state = self.payloads()
         with patch("pandas.read_parquet", return_value=state):
             frame, manifest = load_ema_state(FakeS3(objects), "bucket")
         self.assertEqual(len(frame), 1)
-        self.assertEqual(manifest["price_basis"], "adj_close")
+        self.assertEqual(manifest["promotion_policy"], PROMOTION_POLICY)
 
     def test_rejects_checksum_mismatch(self):
         objects, key, _ = self.payloads()
         objects[key] += b"corrupt"
         with self.assertRaises(ValueError):
             load_ema_state(FakeS3(objects), "bucket")
+
+    def test_rejects_pre_governance_pointer(self):
+        objects, _, state = self.payloads()
+        manifest = json.loads(objects[EMA_POINTER_KEY])
+        manifest.pop("promotion_policy")
+        manifest.pop("equivalence")
+        objects[EMA_POINTER_KEY] = json.dumps(manifest).encode()
+        with patch("pandas.read_parquet", return_value=state):
+            with self.assertRaises(ValueError):
+                load_ema_state(FakeS3(objects), "bucket")
+
+    def test_rejects_failed_equivalence(self):
+        objects, _, state = self.payloads()
+        manifest = json.loads(objects[EMA_POINTER_KEY])
+        manifest["equivalence"]["numeric_failures"] = 1
+        objects[EMA_POINTER_KEY] = json.dumps(manifest).encode()
+        with patch("pandas.read_parquet", return_value=state):
+            with self.assertRaises(ValueError):
+                load_ema_state(FakeS3(objects), "bucket")
 
 
 if __name__ == '__main__':
