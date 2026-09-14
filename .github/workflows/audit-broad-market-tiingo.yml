@@ -1,0 +1,44 @@
+name: 54 broad-market Tiingo coverage audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/audit_broad_market_tiingo.py'
+      - 'tests/test_audit_broad_market_tiingo.py'
+      - '.github/workflows/audit-broad-market-tiingo.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+      TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies and pytest
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python -m pip install pytest
+      - name: Run audit helper tests
+        run: python -m pytest -q tests/test_audit_broad_market_tiingo.py
+      - name: Audit deterministic #53 membership sample against Tiingo
+        run: python src/audit_broad_market_tiingo.py --sample-size 100 --lookback-days 550 --request-delay 0.25
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 54-broad-market-tiingo-${{ github.run_id }}
+          path: diagnostics/54-broad-market-tiingo/report.json
+          if-no-files-found: warn
