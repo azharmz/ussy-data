@@ -33,10 +33,17 @@ jobs:
         with:
           repository: azharmz/ussy-canslim-research
           path: canslim-research
+          ref: cc20bdfb35433b5afacf2d8a51ee56acc76b682e
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Assert frozen classifier contract
+        run: |
+          PYTHONPATH=canslim-research/src python - <<'PY'
+          from canslim_research.market_state_v1 import VERSION
+          assert VERSION == '46-market-state-classification-v1', VERSION
+          PY
       - name: Resolve #49 pointer, verify lineage, run frozen #46, publish PIT state
         run: python src/consume_market_state.py
