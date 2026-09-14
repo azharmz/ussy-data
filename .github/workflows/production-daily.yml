@@ -24,6 +24,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/production-daily.yml'
+      - 'src/bootstrap_missing_ohlcv.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
       - 'src/audit_screening_freshness.py'
@@ -62,6 +63,17 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
+
+      - name: Onboard missing full histories for new universe members
+        shell: bash
+        env:
+          SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
+        run: |
+          python src/bootstrap_missing_ohlcv.py \
+            --snapshot-date "${SNAPSHOT_DATE}" \
+            --max-new-members 50 \
+            --max-retries 3 \
+            --request-delay 2.0
 
       - name: Update daily and rolling OHLCV
         shell: bash
