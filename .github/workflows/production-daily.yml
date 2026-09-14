@@ -25,6 +25,7 @@ on:
     paths:
       - '.github/workflows/production-daily.yml'
       - 'src/bootstrap_missing_ohlcv.py'
+      - 'tests/test_bootstrap_missing_ohlcv.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
       - 'src/audit_screening_freshness.py'
