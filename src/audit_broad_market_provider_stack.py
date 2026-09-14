@@ -9,12 +9,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 import yfinance as yf
+
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from audit_broad_market_tiingo import (
     REQUIRED_BARS,
@@ -29,12 +34,12 @@ from bootstrap_ohlcv import make_s3_client
 VERSION = "54-cycle1-broad-market-provider-stack-audit-v1"
 
 
-def yahoo_symbol(symbol: str) -> str:
+def yahoo_market_symbol(symbol: str) -> str:
     return symbol.strip().upper().replace(".", "-")
 
 
 def fetch_yahoo_adjusted(symbol: str, start: str, end: str) -> list[dict]:
-    provider_symbol = yahoo_symbol(symbol)
+    provider_symbol = yahoo_market_symbol(symbol)
     raw = yf.download(
         provider_symbol,
         start=start,
