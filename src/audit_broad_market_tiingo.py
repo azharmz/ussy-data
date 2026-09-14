@@ -19,8 +19,12 @@ from typing import Any
 
 import pandas as pd
 
-from audit_tiingo import fetch as fetch_tiingo
-from bootstrap_ohlcv import make_s3_client
+try:
+    from audit_tiingo import fetch as fetch_tiingo
+    from bootstrap_ohlcv import make_s3_client
+except ModuleNotFoundError:
+    from src.audit_tiingo import fetch as fetch_tiingo
+    from src.bootstrap_ohlcv import make_s3_client
 
 VERSION = "54-cycle1-broad-market-tiingo-audit-v1"
 MEMBERSHIP_POINTER = "market/membership/official.json"
