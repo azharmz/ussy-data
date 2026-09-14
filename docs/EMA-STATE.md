@@ -45,7 +45,7 @@ After bootstrap, persisted EMA state is advanced only with ready bars newer than
 
 `EMA_t = alpha * price_t + (1 - alpha) * EMA_(t-1)`
 
-The publisher does not recompute EMA from the rolling 300-bar ready window. If persisted state is missing, outside the current ready window, has a price disagreement with the ready source, or otherwise cannot be trusted, that security is rebuilt from full history instead of continuing recursively. A corrupt EMA manifest/parquet fails closed.
+The publisher does not recompute EMA from the rolling 300-bar ready window. If persisted state is missing, outside the current ready window, has a price disagreement with the ready source, or otherwise cannot be trusted, that security is rebuilt from full history instead of continuing recursively. A corrupt or pre-governance EMA manifest is never used as recursive state.
 
 ## Frozen promotion governance
 
@@ -86,16 +86,18 @@ The immutable production object is written only after equivalence PASS. The prod
 - `source_ready_sha256`
 - `source_ready_created_at`
 - `update_method`
+- `promotion_policy`
+- `equivalence`
 
-It also carries `security_ids`, bootstrap/recursive/rebuild counters, min/max state dates, equivalence result, candidate lineage, and promotion policy for auditability.
+It also carries `security_ids`, bootstrap/recursive/rebuild counters, min/max state dates, and candidate lineage for auditability.
 
 ## Loader contract
 
-Use `src/load_ema_state.py`. The loader verifies schema version, periods, price basis, immutable-key prefix, SHA256, security count, security IDs when present, and state-frame uniqueness/validity.
+Use `src/load_ema_state.py`. The loader verifies schema version, periods, price basis, immutable-key prefix, SHA256, security count, security IDs when present, and state-frame uniqueness/validity. It also requires the frozen promotion policy plus equivalence evidence with zero numeric failures and zero classification mismatches. This deliberately fences off any pointer produced before candidate-first governance was installed.
 
 ## Equivalence gate
 
-Equivalence recalculates EMA from full history and compares the candidate values with tight numerical tolerances. On a bootstrap/rebuild run, validation covers the full EMA universe. On ordinary recursive runs it may use a deterministic sample. Trend classification uses three states for equivalence checking only: `STACKED_UP`, `STACKED_DOWN`, and `MIXED`; classification mismatch is a hard failure.
+`src/verify_ema_equivalence.py` validates the candidate before any production approval. It recalculates EMA from full history and compares candidate values with tight numerical tolerances. On a bootstrap/rebuild run, validation covers the full EMA universe. On ordinary recursive runs it may use a deterministic sample. Trend classification uses three states for equivalence checking only: `STACKED_UP`, `STACKED_DOWN`, and `MIXED`; classification mismatch is a hard failure.
 
 The first full bootstrap validation on 14 September 2026 covered 1,226 securities and produced max absolute error 0.0, max relative error 0.0, zero classification mismatches, and zero numeric failures. That run used the earlier publish-before-validate ordering, so its numerical result is evidence for the EMA formula but not evidence that the old promotion sequence satisfies this frozen governance.
 
@@ -103,8 +105,8 @@ This classification is a QA device, not a trading signal contract.
 
 ## Workflow roles
 
-- `ema-state-smoke.yml` uses existing R2 history/ready and must not run Yahoo. During implementation validation it may stop at candidate generation until the promotion gate is fully installed.
-- `production-daily.yml` remains the normal EOD pipeline. EMA integration may be enabled only after the candidate → equivalence → production immutable → pointer-last flow has passed smoke validation end-to-end.
+- `ema-state-smoke.yml` uses existing R2 history/ready and must not run Yahoo. It performs unit tests, candidate generation, the equivalence gate, immutable production upload, and pointer-last promotion.
+- `production-daily.yml` remains the normal EOD pipeline. EMA integration may be re-enabled only after the smoke workflow passes this end-to-end sequence.
 
 ## Downstream use
 
