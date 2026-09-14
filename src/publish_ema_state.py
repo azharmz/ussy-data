@@ -104,8 +104,10 @@ def main() -> None:
     previous = None
     try:
         previous, _ = load_ema_state(s3, bucket)
-    except FileNotFoundError:
-        pass
+    except (FileNotFoundError, ValueError):
+        # Missing, corrupt, or pre-governance state is never used recursively.
+        # Candidate is rebuilt from full history instead.
+        previous = None
 
     state, counters = build_state(s3, bucket, ready, previous)
     buffer = io.BytesIO()
