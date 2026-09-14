@@ -9,7 +9,6 @@ on:
       - 'src/ema_state.py'
       - 'src/load_ema_state.py'
       - 'src/publish_ema_state.py'
-      - 'src/verify_ema_equivalence.py'
       - 'tests/test_ema_state.py'
       - 'tests/test_ema_loader.py'
       - 'docs/EMA-STATE.md'
@@ -48,8 +47,8 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests
 
-      - name: Publish shared EMA state from existing ready/history
+      - name: Build non-production EMA candidate from existing ready/history
         run: python src/publish_ema_state.py
 
-      - name: Verify EMA against long-history reference
-        run: python src/verify_ema_equivalence.py --all-if-bootstrap --sample-size 50
+      # Promotion intentionally disabled until the candidate equivalence promoter
+      # is committed. This workflow must not touch production/indicators/ema/current.json.
