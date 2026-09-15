@@ -18,8 +18,6 @@ on:
   schedule:
     # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
     - cron: "0 3 * * 1-5"
-  # Recovery path for upstream production-data code changes only.
-  # Workflow-only / EMA maintenance must not trigger a Yahoo refresh.
   push:
     branches: [main]
     paths:
@@ -29,6 +27,9 @@ on:
       - 'src/export_ready.py'
       - 'src/audit_screening_freshness.py'
       - 'src/publish_web_status.py'
+      - 'src/r2_storage_guard.py'
+      - 'tests/test_r2_storage_guard.py'
+      - '.github/workflows/production-daily.yml'
 
 permissions:
   contents: read
@@ -46,6 +47,8 @@ jobs:
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      R2_STORAGE_WARN_GIB: "7"
+      R2_STORAGE_HARD_STOP_GIB: "9"
       PYTHONUNBUFFERED: "1"
 
     steps:
@@ -63,6 +66,9 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
+
+      - name: Guard shared R2 bucket before writes
+        run: python src/r2_storage_guard.py
 
       - name: Onboard missing full histories for new universe members
         shell: bash
