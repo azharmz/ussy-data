@@ -4,6 +4,11 @@ This is the onboarding gate between a membership change and the normal productio
 update. A security becomes operational only after its immutable full-history
 object exists under backtest/ohlcv/<security_id>.parquet and passes normal OHLCV
 normalization/QC. Existing histories are never overwritten here.
+
+Reviewed operational/corporate-action dispositions are authoritative for retry
+eligibility. Securities listed in the policy's ``deferred`` section remain
+members of the source universe, but are not repeatedly sent to Yahoo until a
+separate review changes that policy.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ import os
 import random
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from bootstrap_ohlcv import (
@@ -27,6 +33,7 @@ from bootstrap_ohlcv import (
 
 LOG = logging.getLogger("bootstrap_missing_ohlcv")
 HISTORY_PREFIX = "backtest/ohlcv/"
+DEFAULT_POLICY = Path(__file__).resolve().parents[1] / "config" / "bootstrap-policy-2026-08-28.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-new-members", type=int, default=50)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--request-delay", type=float, default=2.0)
+    parser.add_argument("--policy", default=str(DEFAULT_POLICY), help="Reviewed onboarding policy JSON")
     return parser.parse_args()
 
 
@@ -51,6 +59,49 @@ def list_existing_security_ids(s3, bucket: str) -> set[str]:
 
 def missing_members(membership: list[dict[str, Any]], existing_ids: set[str]) -> list[dict[str, Any]]:
     return [row for row in membership if str(row["security_id"]) not in existing_ids]
+
+
+def load_deferred_policy(path: str | Path) -> dict[str, dict[str, Any]]:
+    """Return reviewed no-retry dispositions keyed by immutable security_id."""
+    policy_path = Path(path)
+    if not policy_path.exists():
+        raise FileNotFoundError(f"Reviewed onboarding policy not found: {policy_path}")
+    payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    deferred = payload.get("deferred", [])
+    if not isinstance(deferred, list):
+        raise ValueError("Reviewed onboarding policy field 'deferred' must be a list")
+    result: dict[str, dict[str, Any]] = {}
+    for row in deferred:
+        security_id = str(row.get("security_id", "")).strip()
+        if not security_id:
+            raise ValueError("Deferred onboarding disposition missing security_id")
+        if security_id in result:
+            raise ValueError(f"Duplicate deferred security_id in onboarding policy: {security_id}")
+        result[security_id] = row
+    return result
+
+
+def partition_retryable_missing(
+    missing: list[dict[str, Any]], deferred_by_id: dict[str, dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    retryable: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    for record in missing:
+        security_id = str(record["security_id"])
+        disposition = deferred_by_id.get(security_id)
+        if disposition is None:
+            retryable.append(record)
+            continue
+        deferred.append({
+            **record,
+            "status": "DEFERRED_NO_RETRY",
+            "reason": disposition.get("reason"),
+            "event_date": disposition.get("event_date"),
+            "detail": disposition.get("detail"),
+            "source": disposition.get("source"),
+            "reviewed_at": disposition.get("reviewed_at"),
+        })
+    return retryable, deferred
 
 
 def resolve_snapshot_date(s3, bucket: str, requested: str) -> str:
@@ -75,15 +126,25 @@ def main() -> None:
     membership = load_membership(s3, bucket, snapshot_date)
     existing_ids = list_existing_security_ids(s3, bucket)
     missing = missing_members(membership, existing_ids)
+    deferred_by_id = load_deferred_policy(args.policy)
+    retryable, deferred = partition_retryable_missing(missing, deferred_by_id)
 
-    if len(missing) > args.max_new_members:
+    # The guardrail applies to actual network/bootstrap work, not reviewed
+    # no-retry dispositions that remain visible in the membership snapshot.
+    if len(retryable) > args.max_new_members:
         raise RuntimeError(
-            f"Refusing automatic bootstrap of {len(missing)} missing histories; "
+            f"Refusing automatic bootstrap of {len(retryable)} retryable missing histories; "
             f"guardrail max-new-members={args.max_new_members}. Review membership change first."
         )
 
-    results: list[dict[str, Any]] = []
-    for position, record in enumerate(missing):
+    results: list[dict[str, Any]] = list(deferred)
+    for row in deferred:
+        LOG.info(
+            "Skipping reviewed no-retry member %s (%s): %s",
+            row.get("ticker"), row.get("security_id"), row.get("reason"),
+        )
+
+    for position, record in enumerate(retryable):
         if position and args.request_delay:
             delay = args.request_delay + random.uniform(0, min(0.5, args.request_delay / 4))
             time.sleep(delay)
@@ -119,6 +180,8 @@ def main() -> None:
         "eligible_members": len(membership),
         "existing_histories_before": len(existing_ids),
         "missing_detected": len(missing),
+        "deferred_no_retry": len(deferred),
+        "retryable_missing": len(retryable),
         "bootstrapped": sum(row["status"] == "BOOTSTRAPPED" for row in results),
         "unavailable": sum(row["status"] == "UNAVAILABLE" for row in results),
     }
@@ -126,6 +189,7 @@ def main() -> None:
         "created_at": datetime.now(UTC).isoformat(),
         "snapshot_date": snapshot_date,
         "mode": "NEW_MEMBER_FULL_HISTORY_ONBOARDING",
+        "policy_path": str(args.policy),
         "max_new_members_guardrail": args.max_new_members,
         "summary": summary,
         "results": results,
