@@ -4,6 +4,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "23 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - 'src/publish_r2_storage_status.py'
+      - 'src/r2_storage_guard.py'
+      - 'tests/test_r2_storage_status.py'
+      - 'web/r2/index.html'
+      - '.github/workflows/r2-storage-monitor.yml'
 
 permissions:
   contents: write
@@ -29,19 +37,17 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
-
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
-
+      - name: Run R2 monitor tests
+        run: python -m unittest tests.test_r2_storage_guard tests.test_r2_storage_status
       - name: Build canonical R2 storage status
         run: python src/publish_r2_storage_status.py --local-output web/r2/status.json
-
       - name: Publish static Pages feed
         shell: bash
         run: |
