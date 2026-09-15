@@ -19,7 +19,7 @@ from ema_state import PERIODS, PRICE_BASIS, StateNeedsRebuild, advance_state, bo
 from load_ema_state import load_ema_state
 from load_ready import load_ready
 
-UPDATE_METHOD = "long_history_bootstrap_then_recursive_persisted_state_v1"
+UPDATE_METHOD = "long_history_bootstrap_then_recursive_persisted_state_v2_membership_rebase"
 CANDIDATE_PREFIX = "validation/indicators/ema/"
 
 
@@ -60,6 +60,11 @@ def _bootstrap_checked(s3, bucket: str, security_id: str, ready_rows: pd.DataFra
     return state
 
 
+def _bootstrap_all(s3, bucket: str, groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    rows = [_bootstrap_checked(s3, bucket, security_id, ready_rows) for security_id, ready_rows in groups.items()]
+    return validate_state_frame(pd.DataFrame(rows))
+
+
 def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None) -> tuple[pd.DataFrame, dict[str, int]]:
     groups = _ready_groups(ready)
     previous_rows = {}
@@ -67,14 +72,23 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
         previous = validate_state_frame(previous)
         previous_rows = {str(row.security_id): row for row in previous.itertuples(index=False)}
 
+    # A membership change means at least one security has no persisted state.  Rebase
+    # the whole shared state from canonical long history instead of mixing freshly
+    # bootstrapped rows with recursive rows seeded by an older adjusted-price view.
+    # Adjusted history can be revised retrospectively by the data provider by tiny
+    # amounts; a mixed-origin state then fails exact long-history equivalence even
+    # though trend classifications are unchanged.  We deliberately do not relax the
+    # equivalence tolerance: the rebase restores one canonical numerical origin.
+    missing_prior = set(groups) - set(previous_rows)
+    if previous is None or missing_prior:
+        state = _bootstrap_all(s3, bucket, groups)
+        counters = {"bootstrap": len(state), "recursive": 0, "unchanged": 0, "rebuild": 0}
+        return state, counters
+
     rows: list[dict[str, object]] = []
     counters = {"bootstrap": 0, "recursive": 0, "unchanged": 0, "rebuild": 0}
     for security_id, ready_rows in groups.items():
-        prior = previous_rows.get(security_id)
-        if prior is None:
-            rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
-            counters["bootstrap"] += 1
-            continue
+        prior = previous_rows[security_id]
         try:
             row, advanced = advance_state(prior._asdict(), ready_rows)
             rows.append(row)
