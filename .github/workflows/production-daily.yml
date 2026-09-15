@@ -16,8 +16,8 @@ on:
         required: true
         default: "10"
   schedule:
-    # 10:00 WIB / 11:00 WITA. Extra EOD buffer reduces transient Yahoo gaps.
-    - cron: "0 3 * * 1-5"
+    # 10:07 WIB / 11:07 WITA. Avoid top-of-hour GitHub Actions schedule congestion.
+    - cron: "7 3 * * 1-5"
   push:
     branches: [main]
     paths:
