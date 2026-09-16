@@ -31,7 +31,6 @@ class EquivalenceFailure(RuntimeError):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate and promote shared EMA state")
     parser.add_argument("--sample-size", type=int, default=50)
-    parser.add_argument("--all-if-bootstrap", action="store_true", help="Legacy-compatible flag; per-security v4 verifies bootstrapped/rebuilt IDs plus a sample")
     parser.add_argument("--rtol", type=float, default=1e-10)
     parser.add_argument("--atol", type=float, default=1e-8)
     return parser.parse_args()
