@@ -35,3 +35,5 @@ jobs:
         run: python -m unittest discover -s tests
       - name: Copy and verify legacy history namespace
         run: python src/migrate_history_namespace.py --apply
+
+# Temporary push trigger is retained only through migration validation and will be removed after cutover.
