@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -17,13 +18,20 @@ from ema_state import PERIODS, bootstrap_state, classify_trend, validate_state_f
 CANDIDATE_PREFIX = "validation/indicators/ema/"
 PRODUCTION_PREFIX = "production/indicators/ema/runs/"
 POINTER_KEY = "production/indicators/ema/current.json"
+REBUILD_HINT_KEY = "validation/indicators/ema/rebuild-required/current.json"
 PROGRESS_EVERY = 100
+
+
+class EquivalenceFailure(RuntimeError):
+    def __init__(self, message: str, security_ids: set[str]):
+        super().__init__(message)
+        self.security_ids = set(map(str, security_ids))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate and promote shared EMA state")
     parser.add_argument("--sample-size", type=int, default=50)
-    parser.add_argument("--all-if-bootstrap", action="store_true", help="Legacy-compatible flag; per-security v3 always verifies bootstrapped/rebuilt IDs plus a sample")
+    parser.add_argument("--all-if-bootstrap", action="store_true", help="Legacy-compatible flag; per-security v4 verifies bootstrapped/rebuilt IDs plus a sample")
     parser.add_argument("--rtol", type=float, default=1e-10)
     parser.add_argument("--atol", type=float, default=1e-8)
     return parser.parse_args()
@@ -69,15 +77,18 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
     max_rel = 0.0
     mismatches = 0
     failures: list[str] = []
+    failed_ids: set[str] = set()
     total = len(selected)
     for done, security_id in enumerate(selected, start=1):
         reference = bootstrap_state(history(s3, bucket, security_id), security_id)
         persisted = state_by_id.loc[security_id]
         if pd.Timestamp(reference["as_of_date"]).normalize() != pd.Timestamp(persisted["as_of_date"]).normalize():
             failures.append(f"{security_id}: as_of_date mismatch")
+            failed_ids.add(security_id)
         else:
             if classify_trend(reference) != classify_trend(persisted):
                 mismatches += 1
+                failed_ids.add(security_id)
             for field in ["last_price", *(f"ema{period}" for period in PERIODS)]:
                 ref = float(reference[field])
                 got = float(persisted[field])
@@ -87,6 +98,7 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
                 max_rel = max(max_rel, rel)
                 if not np.isclose(got, ref, rtol=args.rtol, atol=args.atol):
                     failures.append(f"{security_id}: {field} persisted={got:.12g} reference={ref:.12g}")
+                    failed_ids.add(security_id)
         if done == 1 or done == total or done % PROGRESS_EVERY == 0:
             print(f"EMA equivalence progress: {done}/{total}; numeric_failures={len(failures)}; classification_mismatches={mismatches}", flush=True)
     report = {
@@ -99,8 +111,41 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
     if failures or mismatches:
         for failure in failures[:20]:
             print(f"::error title=EMA equivalence failure::{failure}")
-        raise RuntimeError("EMA equivalence failed; production pointer unchanged")
+        raise EquivalenceFailure("EMA equivalence failed; production pointer unchanged", failed_ids)
     return report
+
+
+def _write_rebuild_hints(s3, bucket: str, security_ids: set[str], source_run: str) -> None:
+    existing: set[str] = set()
+    try:
+        existing_payload = read_json(s3, bucket, REBUILD_HINT_KEY)
+        existing = set(map(str, existing_payload.get("security_ids", [])))
+    except Exception as exc:
+        response = getattr(exc, "response", {})
+        code = str(response.get("Error", {}).get("Code", ""))
+        if code not in {"NoSuchKey", "404", "NotFound"} and not isinstance(exc, KeyError):
+            raise
+    merged = sorted(existing | set(map(str, security_ids)))
+    payload = {
+        "schema_version": 1,
+        "created_at": datetime.now(UTC).isoformat(),
+        "source_run": source_run,
+        "reason": "equivalence_drift_requires_per_security_full_history_rebuild",
+        "security_ids": merged,
+    }
+    s3.put_object(Bucket=bucket, Key=REBUILD_HINT_KEY, Body=json.dumps(payload, indent=2).encode(), ContentType="application/json")
+    print(f"EMA equivalence: persisted rebuild hints for {len(merged)} securities", flush=True)
+
+
+def _clear_rebuild_hints(s3, bucket: str) -> None:
+    try:
+        s3.delete_object(Bucket=bucket, Key=REBUILD_HINT_KEY)
+        print("EMA promotion: cleared consumed rebuild hints", flush=True)
+    except Exception as exc:
+        response = getattr(exc, "response", {})
+        code = str(response.get("Error", {}).get("Code", ""))
+        if code not in {"NoSuchKey", "404", "NotFound"} and not isinstance(exc, KeyError):
+            raise
 
 
 def main() -> None:
@@ -128,7 +173,12 @@ def main() -> None:
     if lineage != (ready.get("parquet_key"), ready.get("sha256")):
         raise RuntimeError("EMA candidate is not aligned with current ready source")
 
-    report = equivalence_report(s3, bucket, state, manifest, args)
+    try:
+        report = equivalence_report(s3, bucket, state, manifest, args)
+    except EquivalenceFailure as exc:
+        _write_rebuild_hints(s3, bucket, exc.security_ids, rid)
+        raise
+
     production_key = f"{PRODUCTION_PREFIX}{rid}.parquet"
     print(f"EMA promotion: equivalence PASS; uploading immutable run {production_key}", flush=True)
     s3.put_object(Bucket=bucket, Key=production_key, Body=body, ContentType="application/vnd.apache.parquet")
@@ -143,6 +193,7 @@ def main() -> None:
     print("EMA promotion: lineage rechecked; writing production current pointer LAST", flush=True)
     s3.put_object(Bucket=bucket, Key=POINTER_KEY, Body=json.dumps(promoted, indent=2).encode(), ContentType="application/json")
     print("EMA promotion: production pointer updated", flush=True)
+    _clear_rebuild_hints(s3, bucket)
     print(json.dumps({k: v for k, v in promoted.items() if k != "security_ids"}, indent=2))
 
 

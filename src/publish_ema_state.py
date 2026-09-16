@@ -19,8 +19,9 @@ from ema_state import PERIODS, PRICE_BASIS, StateNeedsRebuild, advance_state, bo
 from load_ema_state import load_ema_state
 from load_ready import load_ready
 
-UPDATE_METHOD = "per_security_bootstrap_rebuild_then_recursive_persisted_state_v3"
+UPDATE_METHOD = "per_security_bootstrap_rebuild_then_recursive_persisted_state_v4_rebuild_hints"
 CANDIDATE_PREFIX = "validation/indicators/ema/"
+REBUILD_HINT_KEY = "validation/indicators/ema/rebuild-required/current.json"
 PROGRESS_EVERY = 100
 
 
@@ -66,8 +67,9 @@ def _bootstrap_checked(s3, bucket: str, security_id: str, ready_rows: pd.DataFra
     return state
 
 
-def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None) -> tuple[pd.DataFrame, dict[str, object]]:
+def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None, force_rebuild_ids: set[str] | None = None) -> tuple[pd.DataFrame, dict[str, object]]:
     groups = _ready_groups(ready)
+    force_rebuild_ids = set(map(str, force_rebuild_ids or set())) & set(groups)
     print(f"EMA source: {len(groups)} ready securities", flush=True)
     previous_rows = {}
     if previous is not None:
@@ -76,7 +78,7 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
 
     counters: dict[str, object] = {
         "bootstrap": 0, "recursive": 0, "unchanged": 0, "rebuild": 0,
-        "bootstrap_security_ids": [], "rebuild_security_ids": [],
+        "bootstrap_security_ids": [], "rebuild_security_ids": [], "forced_rebuild_security_ids": [],
     }
     rows: list[dict[str, object]] = []
     total = len(groups)
@@ -84,7 +86,7 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
         print("EMA mode: initial per-security full-history bootstrap", flush=True)
     else:
         missing = len(set(groups) - set(previous_rows))
-        print(f"EMA mode: per-security update; {missing} new securities require bootstrap", flush=True)
+        print(f"EMA mode: per-security update; {missing} new securities require bootstrap; {len(force_rebuild_ids)} equivalence hints require rebuild", flush=True)
 
     for done, (security_id, ready_rows) in enumerate(groups.items(), start=1):
         prior = previous_rows.get(security_id)
@@ -92,6 +94,11 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
             rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
             counters["bootstrap"] += 1
             counters["bootstrap_security_ids"].append(security_id)
+        elif security_id in force_rebuild_ids:
+            rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
+            counters["rebuild"] += 1
+            counters["rebuild_security_ids"].append(security_id)
+            counters["forced_rebuild_security_ids"].append(security_id)
         else:
             try:
                 row, advanced = advance_state(prior._asdict(), ready_rows)
@@ -114,6 +121,21 @@ def _read_ready_pointer_with_etag(s3, bucket: str) -> tuple[dict, str]:
     return json.loads(obj["Body"].read()), obj["ETag"]
 
 
+def _read_rebuild_hints(s3, bucket: str) -> set[str]:
+    try:
+        payload = json.loads(s3.get_object(Bucket=bucket, Key=REBUILD_HINT_KEY)["Body"].read())
+    except Exception as exc:
+        response = getattr(exc, "response", {})
+        code = str(response.get("Error", {}).get("Code", ""))
+        if code in {"NoSuchKey", "404", "NotFound"} or isinstance(exc, KeyError):
+            return set()
+        raise
+    ids = payload.get("security_ids", [])
+    if not isinstance(ids, list):
+        raise RuntimeError("EMA rebuild hint security_ids must be a list")
+    return set(map(str, ids))
+
+
 def main() -> None:
     s3, bucket = make_s3_client(), os.environ["R2_BUCKET_NAME"]
     print("EMA candidate: loading ready source and prior production state", flush=True)
@@ -128,7 +150,10 @@ def main() -> None:
     except (FileNotFoundError, ValueError):
         previous = None
 
-    state, counters = build_state(s3, bucket, ready, previous)
+    rebuild_hints = _read_rebuild_hints(s3, bucket)
+    if rebuild_hints:
+        print(f"EMA candidate: consuming {len(rebuild_hints)} equivalence rebuild hints", flush=True)
+    state, counters = build_state(s3, bucket, ready, previous, rebuild_hints)
     print(f"EMA state built: {len(state)} securities; bootstrap={counters['bootstrap']}, recursive={counters['recursive']}, unchanged={counters['unchanged']}, rebuild={counters['rebuild']}", flush=True)
     buffer = io.BytesIO()
     state.to_parquet(buffer, engine="pyarrow", index=False, compression="zstd")
@@ -167,6 +192,7 @@ def main() -> None:
         "rebuild_count": counters["rebuild"],
         "bootstrap_security_ids": counters["bootstrap_security_ids"],
         "rebuild_security_ids": counters["rebuild_security_ids"],
+        "forced_rebuild_security_ids": counters["forced_rebuild_security_ids"],
         "as_of_date_min": as_of.min().date().isoformat(),
         "as_of_date_max": as_of.max().date().isoformat(),
     }
