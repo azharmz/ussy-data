@@ -19,7 +19,7 @@ from ema_state import PERIODS, PRICE_BASIS, StateNeedsRebuild, advance_state, bo
 from load_ema_state import load_ema_state
 from load_ready import load_ready
 
-UPDATE_METHOD = "long_history_bootstrap_then_recursive_persisted_state_v2_membership_rebase"
+UPDATE_METHOD = "per_security_bootstrap_rebuild_then_recursive_persisted_state_v3"
 CANDIDATE_PREFIX = "validation/indicators/ema/"
 PROGRESS_EVERY = 100
 
@@ -66,16 +66,7 @@ def _bootstrap_checked(s3, bucket: str, security_id: str, ready_rows: pd.DataFra
     return state
 
 
-def _bootstrap_all(s3, bucket: str, groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    rows = []
-    total = len(groups)
-    for done, (security_id, ready_rows) in enumerate(groups.items(), start=1):
-        rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
-        _progress("bootstrap", done, total)
-    return validate_state_frame(pd.DataFrame(rows))
-
-
-def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None) -> tuple[pd.DataFrame, dict[str, int]]:
+def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None) -> tuple[pd.DataFrame, dict[str, object]]:
     groups = _ready_groups(ready)
     print(f"EMA source: {len(groups)} ready securities", flush=True)
     previous_rows = {}
@@ -83,27 +74,33 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
         previous = validate_state_frame(previous)
         previous_rows = {str(row.security_id): row for row in previous.itertuples(index=False)}
 
-    missing_prior = set(groups) - set(previous_rows)
-    if previous is None or missing_prior:
-        reason = "no prior production state" if previous is None else f"membership rebase ({len(missing_prior)} new securities)"
-        print(f"EMA mode: full-history bootstrap/rebase — {reason}", flush=True)
-        state = _bootstrap_all(s3, bucket, groups)
-        counters = {"bootstrap": len(state), "recursive": 0, "unchanged": 0, "rebuild": 0}
-        return state, counters
-
-    print("EMA mode: recursive persisted-state update", flush=True)
+    counters: dict[str, object] = {
+        "bootstrap": 0, "recursive": 0, "unchanged": 0, "rebuild": 0,
+        "bootstrap_security_ids": [], "rebuild_security_ids": [],
+    }
     rows: list[dict[str, object]] = []
-    counters = {"bootstrap": 0, "recursive": 0, "unchanged": 0, "rebuild": 0}
     total = len(groups)
+    if previous is None:
+        print("EMA mode: initial per-security full-history bootstrap", flush=True)
+    else:
+        missing = len(set(groups) - set(previous_rows))
+        print(f"EMA mode: per-security update; {missing} new securities require bootstrap", flush=True)
+
     for done, (security_id, ready_rows) in enumerate(groups.items(), start=1):
-        prior = previous_rows[security_id]
-        try:
-            row, advanced = advance_state(prior._asdict(), ready_rows)
-            rows.append(row)
-            counters["recursive" if advanced else "unchanged"] += 1
-        except StateNeedsRebuild:
+        prior = previous_rows.get(security_id)
+        if prior is None:
             rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
-            counters["rebuild"] += 1
+            counters["bootstrap"] += 1
+            counters["bootstrap_security_ids"].append(security_id)
+        else:
+            try:
+                row, advanced = advance_state(prior._asdict(), ready_rows)
+                rows.append(row)
+                counters["recursive" if advanced else "unchanged"] += 1
+            except StateNeedsRebuild:
+                rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
+                counters["rebuild"] += 1
+                counters["rebuild_security_ids"].append(security_id)
         _progress("progress", done, total)
 
     state = validate_state_frame(pd.DataFrame(rows))
@@ -132,7 +129,7 @@ def main() -> None:
         previous = None
 
     state, counters = build_state(s3, bucket, ready, previous)
-    print(f"EMA state built: {len(state)} securities; {counters}", flush=True)
+    print(f"EMA state built: {len(state)} securities; bootstrap={counters['bootstrap']}, recursive={counters['recursive']}, unchanged={counters['unchanged']}, rebuild={counters['rebuild']}", flush=True)
     buffer = io.BytesIO()
     state.to_parquet(buffer, engine="pyarrow", index=False, compression="zstd")
     body = buffer.getvalue()
@@ -168,6 +165,8 @@ def main() -> None:
         "recursive_count": counters["recursive"],
         "unchanged_count": counters["unchanged"],
         "rebuild_count": counters["rebuild"],
+        "bootstrap_security_ids": counters["bootstrap_security_ids"],
+        "rebuild_security_ids": counters["rebuild_security_ids"],
         "as_of_date_min": as_of.min().date().isoformat(),
         "as_of_date_max": as_of.max().date().isoformat(),
     }
