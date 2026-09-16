@@ -1,6 +1,9 @@
 name: Production market indexes
 on:
   workflow_dispatch:
+  schedule:
+    # Weekdays after the production OHLCV refresh; publishes the latest completed US session.
+    - cron: "20 4 * * 1-5"
   push:
     branches: [main]
     paths:
