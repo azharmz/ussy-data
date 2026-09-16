@@ -33,28 +33,25 @@ class FakeS3:
 
 
 class PublishEMAStateTests(unittest.TestCase):
-    def test_membership_change_rebases_all_from_long_history(self):
+    def test_membership_change_bootstraps_only_new_security(self):
         a = frame("A", "AAA", 50 + np.linspace(0, 20, 300))
         b = frame("B", "BBB", 30 + np.linspace(0, 10, 300))
         ready = pd.concat([a.iloc[-250:], b.iloc[-250:]], ignore_index=True)
-
-        # Simulate an old persisted A state whose EMA seed came from a slightly
-        # different historical adjusted-price view while its latest price/date
-        # still agree with current Ready.  B is a new universe member.
-        old_a = a.copy()
-        old_a.loc[old_a.index[:-1], "adj_close"] += 1e-5
-        prior = pd.DataFrame([bootstrap_state(old_a, "A")])
+        prior = pd.DataFrame([bootstrap_state(a.iloc[:299], "A")])
 
         state, counters = build_state(FakeS3({"A": a, "B": b}), "bucket", ready, prior)
         by_id = state.set_index("security_id")
         reference_a = bootstrap_state(a, "A")
+        reference_b = bootstrap_state(b, "B")
 
-        self.assertEqual(counters["bootstrap"], 2)
-        self.assertEqual(counters["recursive"], 0)
-        self.assertEqual(counters["unchanged"], 0)
+        self.assertEqual(counters["bootstrap"], 1)
+        self.assertEqual(counters["recursive"], 1)
         self.assertEqual(counters["rebuild"], 0)
-        for field in ["last_price", "ema20", "ema50", "ema150", "ema200"]:
-            self.assertEqual(float(by_id.loc["A", field]), float(reference_a[field]))
+        self.assertEqual(counters["bootstrap_security_ids"], ["B"])
+        self.assertEqual(counters["rebuild_security_ids"], [])
+        for sid, reference in [("A", reference_a), ("B", reference_b)]:
+            for field in ["last_price", "ema20", "ema50", "ema150", "ema200"]:
+                self.assertTrue(np.isclose(by_id.loc[sid, field], reference[field], rtol=1e-12, atol=1e-12))
 
     def test_unchanged_membership_keeps_recursive_path(self):
         a = frame("A", "AAA", 50 + np.linspace(0, 20, 300))
@@ -66,6 +63,7 @@ class PublishEMAStateTests(unittest.TestCase):
 
         self.assertEqual(counters["bootstrap"], 0)
         self.assertEqual(counters["recursive"], 1)
+        self.assertEqual(counters["bootstrap_security_ids"], [])
         for field in ["last_price", "ema20", "ema50", "ema150", "ema200"]:
             self.assertTrue(np.isclose(state.iloc[0][field], reference[field], rtol=1e-12, atol=1e-12))
 

@@ -23,7 +23,7 @@ PROGRESS_EVERY = 100
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate and promote shared EMA state")
     parser.add_argument("--sample-size", type=int, default=50)
-    parser.add_argument("--all-if-bootstrap", action="store_true")
+    parser.add_argument("--all-if-bootstrap", action="store_true", help="Legacy-compatible flag; per-security v3 always verifies bootstrapped/rebuilt IDs plus a sample")
     parser.add_argument("--rtol", type=float, default=1e-10)
     parser.add_argument("--atol", type=float, default=1e-8)
     return parser.parse_args()
@@ -42,11 +42,28 @@ def history(s3, bucket: str, security_id: str) -> pd.DataFrame:
     return pd.read_parquet(io.BytesIO(body), engine="pyarrow")
 
 
-def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, args: argparse.Namespace) -> dict:
+def select_equivalence_ids(state: pd.DataFrame, manifest: dict, sample_size: int) -> tuple[list[str], str]:
     ids = sorted(state["security_id"].astype(str))
-    verify_all = args.all_if_bootstrap and (manifest.get("bootstrap_count", 0) > 0 or manifest.get("rebuild_count", 0) > 0)
-    selected = ids if verify_all else ids[: min(args.sample_size, len(ids))]
-    print(f"EMA equivalence: mode={'all' if verify_all else 'sample'}, verifying {len(selected)} securities", flush=True)
+    required = set(map(str, manifest.get("bootstrap_security_ids", []))) | set(map(str, manifest.get("rebuild_security_ids", [])))
+    unknown = required - set(ids)
+    if unknown:
+        raise RuntimeError(f"EMA manifest required-equivalence IDs absent from candidate: {sorted(unknown)[:20]}")
+    remaining = [sid for sid in ids if sid not in required]
+    sampled = remaining[: min(sample_size, len(remaining))]
+    selected = sorted(required | set(sampled))
+    if len(required) == len(ids):
+        mode = "all_required"
+    elif required:
+        mode = "required_plus_sample"
+    else:
+        mode = "sample"
+    return selected, mode
+
+
+def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, args: argparse.Namespace) -> dict:
+    selected, mode = select_equivalence_ids(state, manifest, args.sample_size)
+    required_count = len(set(manifest.get("bootstrap_security_ids", [])) | set(manifest.get("rebuild_security_ids", [])))
+    print(f"EMA equivalence: mode={mode}, verifying {len(selected)} securities ({required_count} required)", flush=True)
     state_by_id = state.set_index("security_id")
     max_abs = 0.0
     max_rel = 0.0
@@ -73,7 +90,7 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
         if done == 1 or done == total or done % PROGRESS_EVERY == 0:
             print(f"EMA equivalence progress: {done}/{total}; numeric_failures={len(failures)}; classification_mismatches={mismatches}", flush=True)
     report = {
-        "verified": len(selected), "mode": "all" if verify_all else "sample",
+        "verified": len(selected), "required_verified": required_count, "mode": mode,
         "rtol": args.rtol, "atol": args.atol, "max_abs_error": max_abs,
         "max_relative_error": max_rel, "classification_mismatches": mismatches,
         "numeric_failures": len(failures),
