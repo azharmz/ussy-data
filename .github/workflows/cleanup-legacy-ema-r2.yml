@@ -1,0 +1,59 @@
+name: Cleanup legacy EMA R2 artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Actually delete superseded EMA objects (false = dry-run)
+        required: true
+        type: boolean
+        default: false
+      keep_production_runs:
+        description: Immutable EMA production generations to retain
+        required: true
+        default: "2"
+      keep_candidate_runs:
+        description: Newest candidate run IDs to retain (production-linked candidates are also protected)
+        required: true
+        default: "2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ema-r2-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run EMA cleanup dry-run
+        if: ${{ !inputs.apply }}
+        run: |
+          python src/cleanup_legacy_ema_r2.py \
+            --keep-production-runs "${{ inputs.keep_production_runs }}" \
+            --keep-candidate-runs "${{ inputs.keep_candidate_runs }}"
+      - name: Apply guarded EMA cleanup
+        if: ${{ inputs.apply }}
+        run: |
+          python src/cleanup_legacy_ema_r2.py \
+            --apply \
+            --keep-production-runs "${{ inputs.keep_production_runs }}" \
+            --keep-candidate-runs "${{ inputs.keep_candidate_runs }}"
