@@ -6,7 +6,6 @@ on:
     paths:
       - 'src/repair_partial_daily_bar.py'
       - 'tests/test_provider_symbols.py'
-      - '.github/workflows/audit-repair-sep14-ohlcv.yml'
 
 permissions:
   contents: read
@@ -29,7 +28,5 @@ jobs:
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Unit tests
         run: python -m unittest discover -s tests
-      - name: Apply targeted Sep14 finalized bar repair
-        run: python src/repair_partial_daily_bar.py --date 2026-09-14 --security-id US4435106079 --security-id US82981J8514 --apply
-      - name: Verify targeted Sep14 bars are clean
-        run: python src/repair_partial_daily_bar.py --date 2026-09-14 --security-id US4435106079 --security-id US82981J8514
+      - name: Audit Sep14 finalized bars (no writes)
+        run: python src/repair_partial_daily_bar.py --date 2026-09-14
