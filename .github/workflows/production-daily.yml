@@ -116,3 +116,5 @@ jobs:
 
       - name: Publish read-only web status
         run: python src/publish_web_status.py
+
+# Sep14 finalized-bar incident: derived-state rebuild trigger after targeted R2 repair.
