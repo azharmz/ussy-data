@@ -21,6 +21,12 @@ from load_ready import load_ready
 
 UPDATE_METHOD = "long_history_bootstrap_then_recursive_persisted_state_v2_membership_rebase"
 CANDIDATE_PREFIX = "validation/indicators/ema/"
+PROGRESS_EVERY = 100
+
+
+def _progress(label: str, done: int, total: int) -> None:
+    if done == 1 or done == total or done % PROGRESS_EVERY == 0:
+        print(f"EMA {label}: {done}/{total}", flush=True)
 
 
 def candidate_id() -> str:
@@ -61,33 +67,35 @@ def _bootstrap_checked(s3, bucket: str, security_id: str, ready_rows: pd.DataFra
 
 
 def _bootstrap_all(s3, bucket: str, groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    rows = [_bootstrap_checked(s3, bucket, security_id, ready_rows) for security_id, ready_rows in groups.items()]
+    rows = []
+    total = len(groups)
+    for done, (security_id, ready_rows) in enumerate(groups.items(), start=1):
+        rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
+        _progress("bootstrap", done, total)
     return validate_state_frame(pd.DataFrame(rows))
 
 
 def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | None) -> tuple[pd.DataFrame, dict[str, int]]:
     groups = _ready_groups(ready)
+    print(f"EMA source: {len(groups)} ready securities", flush=True)
     previous_rows = {}
     if previous is not None:
         previous = validate_state_frame(previous)
         previous_rows = {str(row.security_id): row for row in previous.itertuples(index=False)}
 
-    # A membership change means at least one security has no persisted state.  Rebase
-    # the whole shared state from canonical long history instead of mixing freshly
-    # bootstrapped rows with recursive rows seeded by an older adjusted-price view.
-    # Adjusted history can be revised retrospectively by the data provider by tiny
-    # amounts; a mixed-origin state then fails exact long-history equivalence even
-    # though trend classifications are unchanged.  We deliberately do not relax the
-    # equivalence tolerance: the rebase restores one canonical numerical origin.
     missing_prior = set(groups) - set(previous_rows)
     if previous is None or missing_prior:
+        reason = "no prior production state" if previous is None else f"membership rebase ({len(missing_prior)} new securities)"
+        print(f"EMA mode: full-history bootstrap/rebase — {reason}", flush=True)
         state = _bootstrap_all(s3, bucket, groups)
         counters = {"bootstrap": len(state), "recursive": 0, "unchanged": 0, "rebuild": 0}
         return state, counters
 
+    print("EMA mode: recursive persisted-state update", flush=True)
     rows: list[dict[str, object]] = []
     counters = {"bootstrap": 0, "recursive": 0, "unchanged": 0, "rebuild": 0}
-    for security_id, ready_rows in groups.items():
+    total = len(groups)
+    for done, (security_id, ready_rows) in enumerate(groups.items(), start=1):
         prior = previous_rows[security_id]
         try:
             row, advanced = advance_state(prior._asdict(), ready_rows)
@@ -96,6 +104,7 @@ def build_state(s3, bucket: str, ready: pd.DataFrame, previous: pd.DataFrame | N
         except StateNeedsRebuild:
             rows.append(_bootstrap_checked(s3, bucket, security_id, ready_rows))
             counters["rebuild"] += 1
+        _progress("progress", done, total)
 
     state = validate_state_frame(pd.DataFrame(rows))
     if set(state["security_id"]) != set(groups):
@@ -110,6 +119,7 @@ def _read_ready_pointer_with_etag(s3, bucket: str) -> tuple[dict, str]:
 
 def main() -> None:
     s3, bucket = make_s3_client(), os.environ["R2_BUCKET_NAME"]
+    print("EMA candidate: loading ready source and prior production state", flush=True)
     ready, ready_manifest = load_ready(s3, bucket)
     observed_ready, ready_etag = _read_ready_pointer_with_etag(s3, bucket)
     if observed_ready != ready_manifest:
@@ -119,21 +129,22 @@ def main() -> None:
     try:
         previous, _ = load_ema_state(s3, bucket)
     except (FileNotFoundError, ValueError):
-        # Missing, corrupt, or pre-governance state is never used recursively.
-        # Candidate is rebuilt from full history instead.
         previous = None
 
     state, counters = build_state(s3, bucket, ready, previous)
+    print(f"EMA state built: {len(state)} securities; {counters}", flush=True)
     buffer = io.BytesIO()
     state.to_parquet(buffer, engine="pyarrow", index=False, compression="zstd")
     body = buffer.getvalue()
     digest = hashlib.sha256(body).hexdigest()
     parquet_key, manifest_key = candidate_keys()
 
+    print(f"EMA candidate: uploading {parquet_key}", flush=True)
     s3.put_object(Bucket=bucket, Key=parquet_key, Body=body, ContentType="application/vnd.apache.parquet")
     uploaded = s3.get_object(Bucket=bucket, Key=parquet_key)["Body"].read()
     if len(uploaded) != len(body) or hashlib.sha256(uploaded).hexdigest() != digest:
         raise RuntimeError("EMA candidate verification failed")
+    print("EMA candidate: upload checksum verified", flush=True)
 
     if s3.head_object(Bucket=bucket, Key="production/ready/current.json")["ETag"] != ready_etag:
         raise RuntimeError("Ready pointer changed before EMA candidate completed; candidate left unpromoted")
@@ -161,6 +172,7 @@ def main() -> None:
         "as_of_date_max": as_of.max().date().isoformat(),
     }
     s3.put_object(Bucket=bucket, Key=manifest_key, Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
+    print("EMA candidate: manifest published; candidate remains non-production until equivalence gate passes", flush=True)
     print(json.dumps({k: v for k, v in manifest.items() if k != "security_ids"}, indent=2))
 
 
