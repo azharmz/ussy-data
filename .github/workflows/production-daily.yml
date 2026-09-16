@@ -10,7 +10,7 @@ on:
       request_delay:
         description: Delay between Yahoo batches in seconds
         required: true
-        default: "10.0"
+        default: "2.0"
       batch_size:
         description: Yahoo tickers per controlled batch
         required: true
@@ -94,7 +94,7 @@ jobs:
         shell: bash
         env:
           SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
-          REQUEST_DELAY: ${{ inputs.request_delay || '10.0' }}
+          REQUEST_DELAY: ${{ inputs.request_delay || '2.0' }}
           BATCH_SIZE: ${{ inputs.batch_size || '10' }}
         run: |
           python src/run_production_finalized.py \
