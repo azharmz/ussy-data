@@ -16,10 +16,6 @@ on:
         description: Newest candidate run IDs to retain (production-linked candidates are also protected)
         required: true
         default: "2"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cleanup-legacy-ema-r2.yml"
 
 permissions:
   contents: read
@@ -49,15 +45,15 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Run EMA cleanup dry-run
-        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.apply }}
+        if: ${{ !inputs.apply }}
         run: |
           python src/cleanup_legacy_ema_r2.py \
-            --keep-production-runs "${{ inputs.keep_production_runs || '2' }}" \
-            --keep-candidate-runs "${{ inputs.keep_candidate_runs || '2' }}"
+            --keep-production-runs "${{ inputs.keep_production_runs }}" \
+            --keep-candidate-runs "${{ inputs.keep_candidate_runs }}"
       - name: Apply guarded EMA cleanup
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) || (github.event_name == 'push' && github.event.head_commit.message == 'Apply guarded EMA R2 cleanup once') }}
+        if: ${{ inputs.apply }}
         run: |
           python src/cleanup_legacy_ema_r2.py \
             --apply \
-            --keep-production-runs "${{ inputs.keep_production_runs || '2' }}" \
-            --keep-candidate-runs "${{ inputs.keep_candidate_runs || '2' }}"
+            --keep-production-runs "${{ inputs.keep_production_runs }}" \
+            --keep-candidate-runs "${{ inputs.keep_candidate_runs }}"
