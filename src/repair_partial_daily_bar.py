@@ -65,7 +65,12 @@ def main():
     run=os.getenv("GITHUB_RUN_ID","local"); attempt=os.getenv("GITHUB_RUN_ATTEMPT","1")
     key=f"audit/ohlcv-repair/{args.date}/run-{run}-{attempt}.json"
     s3.put_object(Bucket=bucket,Key=key,Body=json.dumps(report,indent=2).encode(),ContentType="application/json")
-    print(json.dumps({k:v for k,v in report.items() if k not in {"changes","missing_rows","error_rows"}},indent=2)); print(f"Audit report: {key}")
+    print(json.dumps({k:v for k,v in report.items() if k not in {"changes","missing_rows","error_rows"}},indent=2))
+    if changed:
+        print("Changed rows:", json.dumps(changed, indent=2))
+    if missing:
+        print("Missing rows:", json.dumps(missing, indent=2))
+    print(f"Audit report: {key}")
     if errors:
         print("First processing errors:", json.dumps(errors[:10], indent=2))
         raise RuntimeError(f"repair completed with {len(errors)} download/processing errors")
