@@ -2,6 +2,9 @@ name: Production market state
 
 on:
   workflow_dispatch:
+  schedule:
+    # Run after the daily major-index publisher so candidate generation cannot inherit stale M state.
+    - cron: "50 4 * * 1-5"
   push:
     branches: [main]
     paths:
