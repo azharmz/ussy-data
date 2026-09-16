@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 from datetime import datetime, timedelta, UTC
@@ -51,7 +50,7 @@ def main():
             old=hist[hist["date"].dt.normalize()==target]
             if len(old)!=1:
                 missing.append({"security_id":sid,"ticker":ticker}); continue
-            cols=["open_raw","high_raw","low_raw","close_raw","adj_close","volume"]
+            cols=["open","high","low","close","adj_close","volume"]
             before={c:float(old.iloc[0][c]) for c in cols}; after={c:float(fresh.iloc[0][c]) for c in cols}
             if before==after: continue
             changed.append({"security_id":sid,"ticker":ticker,"before":before,"after":after})
@@ -67,6 +66,8 @@ def main():
     key=f"audit/ohlcv-repair/{args.date}/run-{run}-{attempt}.json"
     s3.put_object(Bucket=bucket,Key=key,Body=json.dumps(report,indent=2).encode(),ContentType="application/json")
     print(json.dumps({k:v for k,v in report.items() if k not in {"changes","missing_rows","error_rows"}},indent=2)); print(f"Audit report: {key}")
-    if errors: raise RuntimeError(f"repair completed with {len(errors)} download/processing errors")
+    if errors:
+        print("First processing errors:", json.dumps(errors[:10], indent=2))
+        raise RuntimeError(f"repair completed with {len(errors)} download/processing errors")
 
 if __name__=="__main__": main()
