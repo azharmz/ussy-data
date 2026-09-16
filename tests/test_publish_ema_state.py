@@ -67,6 +67,23 @@ class PublishEMAStateTests(unittest.TestCase):
         for field in ["last_price", "ema20", "ema50", "ema150", "ema200"]:
             self.assertTrue(np.isclose(state.iloc[0][field], reference[field], rtol=1e-12, atol=1e-12))
 
+    def test_equivalence_hint_forces_only_named_security_rebuild(self):
+        a = frame("A", "AAA", 50 + np.linspace(0, 20, 300))
+        b = frame("B", "BBB", 30 + np.linspace(0, 10, 300))
+        ready = pd.concat([a.iloc[-250:], b.iloc[-250:]], ignore_index=True)
+        prior = pd.DataFrame([bootstrap_state(a.iloc[:299], "A"), bootstrap_state(b.iloc[:299], "B")])
+
+        state, counters = build_state(FakeS3({"A": a, "B": b}), "bucket", ready, prior, {"A"})
+        by_id = state.set_index("security_id")
+
+        self.assertEqual(counters["rebuild"], 1)
+        self.assertEqual(counters["recursive"], 1)
+        self.assertEqual(counters["rebuild_security_ids"], ["A"])
+        self.assertEqual(counters["forced_rebuild_security_ids"], ["A"])
+        reference_a = bootstrap_state(a, "A")
+        for field in ["last_price", "ema20", "ema50", "ema150", "ema200"]:
+            self.assertTrue(np.isclose(by_id.loc["A", field], reference_a[field], rtol=1e-12, atol=1e-12))
+
 
 if __name__ == "__main__":
     unittest.main()
