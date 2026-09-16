@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/repair_partial_daily_bar.py'
+      - 'tests/test_provider_symbols.py'
       - '.github/workflows/audit-repair-sep14-ohlcv.yml'
 
 permissions:
