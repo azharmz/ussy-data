@@ -24,6 +24,7 @@ on:
       - 'src/bootstrap_missing_ohlcv.py'
       - 'tests/test_bootstrap_missing_ohlcv.py'
       - 'src/guard_us_market_finalization.py'
+      - 'src/run_production_finalized.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
       - 'src/publish_ema_state.py'
@@ -75,9 +76,6 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests
 
-      - name: Guard against unfinished US daily bars
-        run: python src/guard_us_market_finalization.py
-
       - name: Guard shared R2 bucket before writes
         run: python src/r2_storage_guard.py
 
@@ -92,14 +90,14 @@ jobs:
             --max-retries 3 \
             --request-delay 2.0
 
-      - name: Update daily and rolling OHLCV
+      - name: Update finalized daily and rolling OHLCV
         shell: bash
         env:
           SNAPSHOT_DATE: ${{ inputs.snapshot_date || 'current' }}
           REQUEST_DELAY: ${{ inputs.request_delay || '10.0' }}
           BATCH_SIZE: ${{ inputs.batch_size || '10' }}
         run: |
-          python src/update_production.py \
+          python src/run_production_finalized.py \
             --snapshot-date "${SNAPSHOT_DATE}" \
             --rolling-bars 300 \
             --minimum-ready-bars 250 \
