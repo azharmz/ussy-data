@@ -17,6 +17,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="Repair one finalized daily OHLCV bar in R2 histories")
     p.add_argument("--date", required=True)
     p.add_argument("--snapshot-date", default="current")
+    p.add_argument("--security-id", action="append", default=[], help="Restrict audit/repair to one security_id; repeatable")
     p.add_argument("--apply", action="store_true")
     return p.parse_args()
 
@@ -33,6 +34,12 @@ def main():
     eligible = {str(r["security_id"]): r for r in records if is_eligible(r)}
     existing_ids = {k.removeprefix("backtest/ohlcv/").removesuffix(".parquet") for k in list_keys(s3,bucket,"backtest/ohlcv/") if k.endswith(".parquet")}
     ids = sorted(set(eligible) & existing_ids)
+    if args.security_id:
+        requested = set(args.security_id)
+        unknown = sorted(requested - set(ids))
+        if unknown:
+            raise ValueError(f"requested security_id not eligible/present: {unknown}")
+        ids = [sid for sid in ids if sid in requested]
     changed=[]; missing=[]; errors=[]
     start=target.date().isoformat(); end=(target.date()+timedelta(days=1)).isoformat()
     for i,sid in enumerate(ids,1):
@@ -61,7 +68,7 @@ def main():
         except Exception as exc:
             errors.append({"security_id":sid,"ticker":ticker,"error":str(exc)[:300]})
         if i%100==0: print(f"progress {i}/{len(ids)} changed={len(changed)} missing={len(missing)} errors={len(errors)}",flush=True)
-    report={"contract":"ussy-one-date-ohlcv-repair-v1","created_at":datetime.now(UTC).isoformat(),"target_date":args.date,"snapshot_date":snap,"apply":args.apply,"eligible_histories":len(ids),"changed":len(changed),"missing":len(missing),"errors":len(errors),"changes":changed,"missing_rows":missing,"error_rows":errors}
+    report={"contract":"ussy-one-date-ohlcv-repair-v1","created_at":datetime.now(UTC).isoformat(),"target_date":args.date,"snapshot_date":snap,"apply":args.apply,"requested_security_ids":args.security_id,"eligible_histories":len(ids),"changed":len(changed),"missing":len(missing),"errors":len(errors),"changes":changed,"missing_rows":missing,"error_rows":errors}
     run=os.getenv("GITHUB_RUN_ID","local"); attempt=os.getenv("GITHUB_RUN_ATTEMPT","1")
     key=f"audit/ohlcv-repair/{args.date}/run-{run}-{attempt}.json"
     s3.put_object(Bucket=bucket,Key=key,Body=json.dumps(report,indent=2).encode(),ContentType="application/json")
