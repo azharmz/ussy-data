@@ -36,8 +36,6 @@ on:
       - 'src/publish_web_status.py'
       - 'src/r2_storage_guard.py'
       - 'tests/test_r2_storage_guard.py'
-      - 'src/publish_r2_storage_status.py'
-      - 'tests/test_r2_storage_status.py'
       - '.github/workflows/production-daily.yml'
 
 permissions:
@@ -118,7 +116,3 @@ jobs:
 
       - name: Publish read-only web status
         run: python src/publish_web_status.py
-
-      - name: Publish shared R2 storage status
-        if: always()
-        run: python src/publish_r2_storage_status.py
