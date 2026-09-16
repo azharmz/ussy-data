@@ -17,6 +17,7 @@ from ema_state import PERIODS, bootstrap_state, classify_trend, validate_state_f
 CANDIDATE_PREFIX = "validation/indicators/ema/"
 PRODUCTION_PREFIX = "production/indicators/ema/runs/"
 POINTER_KEY = "production/indicators/ema/current.json"
+PROGRESS_EVERY = 100
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,35 +46,39 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
     ids = sorted(state["security_id"].astype(str))
     verify_all = args.all_if_bootstrap and (manifest.get("bootstrap_count", 0) > 0 or manifest.get("rebuild_count", 0) > 0)
     selected = ids if verify_all else ids[: min(args.sample_size, len(ids))]
+    print(f"EMA equivalence: mode={'all' if verify_all else 'sample'}, verifying {len(selected)} securities", flush=True)
     state_by_id = state.set_index("security_id")
     max_abs = 0.0
     max_rel = 0.0
     mismatches = 0
     failures: list[str] = []
-    for security_id in selected:
+    total = len(selected)
+    for done, security_id in enumerate(selected, start=1):
         reference = bootstrap_state(history(s3, bucket, security_id), security_id)
         persisted = state_by_id.loc[security_id]
         if pd.Timestamp(reference["as_of_date"]).normalize() != pd.Timestamp(persisted["as_of_date"]).normalize():
             failures.append(f"{security_id}: as_of_date mismatch")
-            continue
-        if classify_trend(reference) != classify_trend(persisted):
-            mismatches += 1
-        for field in ["last_price", *(f"ema{period}" for period in PERIODS)]:
-            ref = float(reference[field])
-            got = float(persisted[field])
-            diff = abs(got - ref)
-            rel = diff / abs(ref) if ref else diff
-            max_abs = max(max_abs, diff)
-            max_rel = max(max_rel, rel)
-            if not np.isclose(got, ref, rtol=args.rtol, atol=args.atol):
-                failures.append(f"{security_id}: {field} persisted={got:.12g} reference={ref:.12g}")
+        else:
+            if classify_trend(reference) != classify_trend(persisted):
+                mismatches += 1
+            for field in ["last_price", *(f"ema{period}" for period in PERIODS)]:
+                ref = float(reference[field])
+                got = float(persisted[field])
+                diff = abs(got - ref)
+                rel = diff / abs(ref) if ref else diff
+                max_abs = max(max_abs, diff)
+                max_rel = max(max_rel, rel)
+                if not np.isclose(got, ref, rtol=args.rtol, atol=args.atol):
+                    failures.append(f"{security_id}: {field} persisted={got:.12g} reference={ref:.12g}")
+        if done == 1 or done == total or done % PROGRESS_EVERY == 0:
+            print(f"EMA equivalence progress: {done}/{total}; numeric_failures={len(failures)}; classification_mismatches={mismatches}", flush=True)
     report = {
         "verified": len(selected), "mode": "all" if verify_all else "sample",
         "rtol": args.rtol, "atol": args.atol, "max_abs_error": max_abs,
         "max_relative_error": max_rel, "classification_mismatches": mismatches,
         "numeric_failures": len(failures),
     }
-    print(json.dumps(report, indent=2))
+    print(json.dumps(report, indent=2), flush=True)
     if failures or mismatches:
         for failure in failures[:20]:
             print(f"::error title=EMA equivalence failure::{failure}")
@@ -89,6 +94,7 @@ def main() -> None:
     rid = run_id()
     candidate_key = f"{CANDIDATE_PREFIX}{rid}.parquet"
     candidate_manifest_key = f"{CANDIDATE_PREFIX}{rid}.json"
+    print(f"EMA equivalence: loading candidate {rid}", flush=True)
     manifest = read_json(s3, bucket, candidate_manifest_key)
     manifest["candidate_manifest_key"] = candidate_manifest_key
     if manifest.get("candidate_parquet_key") != candidate_key:
@@ -107,15 +113,19 @@ def main() -> None:
 
     report = equivalence_report(s3, bucket, state, manifest, args)
     production_key = f"{PRODUCTION_PREFIX}{rid}.parquet"
+    print(f"EMA promotion: equivalence PASS; uploading immutable run {production_key}", flush=True)
     s3.put_object(Bucket=bucket, Key=production_key, Body=body, ContentType="application/vnd.apache.parquet")
     uploaded = s3.get_object(Bucket=bucket, Key=production_key)["Body"].read()
     if hashlib.sha256(uploaded).hexdigest() != digest:
         raise RuntimeError("EMA immutable production upload verification failed")
+    print("EMA promotion: immutable upload checksum verified", flush=True)
     ready_after = read_json(s3, bucket, "production/ready/current.json")
     if lineage != (ready_after.get("parquet_key"), ready_after.get("sha256")):
         raise RuntimeError("Ready source changed before EMA promotion; pointer unchanged")
     promoted = build_promoted_manifest(manifest, production_key, digest, report)
+    print("EMA promotion: lineage rechecked; writing production current pointer LAST", flush=True)
     s3.put_object(Bucket=bucket, Key=POINTER_KEY, Body=json.dumps(promoted, indent=2).encode(), ContentType="application/json")
+    print("EMA promotion: production pointer updated", flush=True)
     print(json.dumps({k: v for k, v in promoted.items() if k != "security_ids"}, indent=2))
 
 
