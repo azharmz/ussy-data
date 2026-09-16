@@ -23,6 +23,7 @@ on:
     paths:
       - 'src/bootstrap_missing_ohlcv.py'
       - 'tests/test_bootstrap_missing_ohlcv.py'
+      - 'src/guard_us_market_finalization.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
       - 'src/publish_ema_state.py'
@@ -73,6 +74,9 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
+
+      - name: Guard against unfinished US daily bars
+        run: python src/guard_us_market_finalization.py
 
       - name: Guard shared R2 bucket before writes
         run: python src/r2_storage_guard.py
