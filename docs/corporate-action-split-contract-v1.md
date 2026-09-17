@@ -1,6 +1,6 @@
 # Corporate-Action Split Facts Contract v1
 
-Status: **FROZEN DESIGN / VALIDATION IN PROGRESS / NOT YET PRODUCTION-MATERIALIZED**
+Status: **FROZEN DESIGN / VALIDATION PASS / BOUNDED R2 PILOT PASS / NOT YET PRODUCTION-MATERIALIZED**
 
 Owner: `azharmz/ussy-data`
 
@@ -70,11 +70,9 @@ For any downstream as-of date `T`, only events satisfying `effective_date <= T` 
 
 No claim is made that v1 reconstructs what announcement information was known before the effective date.
 
-## Proposed additive R2 namespace
+## Additive R2 namespace
 
-No object is to be written until implementation validation passes.
-
-Planned namespace:
+Bounded pilot objects are isolated under `corporate_actions/splits/pilots/` and do not advance the production pointer. Production materialization, when approved by the remaining gate, uses:
 
 - `corporate_actions/splits/current.json`
 - `corporate_actions/splits/runs/<run_id>/events.parquet`
@@ -140,10 +138,18 @@ Historical identity lifecycle validation:
 - non-overlapping ticker reuse can resolve deterministically by event date.
 - validation uses zero Tiingo requests and zero R2 writes.
 
-## Remaining gates before bounded publication pilot
+## Bounded R2 publication pilot evidence
 
-- idempotent rerun/provider-correction lineage test;
-- immutable-run + pointer-last test against a non-production fake/test namespace or equivalent isolated store;
-- prove no writes to canonical OHLCV/READY/EMA namespaces.
+- Actions run `35283096277`: **PASS**.
+- Scope: NVDA + AVGO only.
+- Tiingo request budget: **2**; actual requests: **2**.
+- Events published/read back: **2**.
+- Immutable run prefix: `corporate_actions/splits/pilots/runs/pilot-20260917T223950Z-35283096277`.
+- Pilot pointer: `corporate_actions/splits/pilots/current.json`, written last and read back.
+- Events SHA256: `ba02c6bffe0952985737864e5503cf0a3922268c4359c07ba8275e28039216aa`.
+- Canonical OHLCV/READY/EMA writes: **zero**.
+- Production corporate-action pointer `corporate_actions/splits/current.json`: **not written**.
 
-Only after these gates pass may a bounded pilot be published. Full-universe historical materialization is a later decision based on pilot coverage and unresolved-identity evidence, and must respect Tiingo's request ceiling.
+## Remaining gate before production materialization
+
+Bounded publication mechanics are now evidenced. Before advancing a production corporate-action pointer, implement a bounded incremental acquisition plan that respects Tiingo's 50-request/hour ceiling, checkpoints provider evidence, resolves identities fail-closed, and can resume without re-requesting already checkpointed symbols. Full-universe historical materialization must not be a monolithic one-request-per-symbol run.
