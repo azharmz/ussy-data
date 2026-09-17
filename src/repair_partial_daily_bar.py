@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, UTC
 import pandas as pd
 import yfinance as yf
 
-from bootstrap_ohlcv import OHLCV_COLUMNS, make_s3_client, normalize_history, yahoo_symbol
+from bootstrap_ohlcv import HISTORY_PREFIX, OHLCV_COLUMNS, make_s3_client, normalize_history, yahoo_symbol
 from update_production import list_keys, read_json, read_parquet, write_parquet
 from compliance import is_eligible
 
@@ -32,7 +32,7 @@ def main():
     if snap == "current": snap = str(read_json(s3, bucket, "universe/current.json")["snapshot_date"])
     records = read_json(s3, bucket, f"universe/membership/{snap}.json")["records"]
     eligible = {str(r["security_id"]): r for r in records if is_eligible(r)}
-    existing_ids = {k.removeprefix("backtest/ohlcv/").removesuffix(".parquet") for k in list_keys(s3,bucket,"backtest/ohlcv/") if k.endswith(".parquet")}
+    existing_ids = {k.removeprefix(HISTORY_PREFIX).removesuffix(".parquet") for k in list_keys(s3,bucket,HISTORY_PREFIX) if k.endswith(".parquet")}
     ids = sorted(set(eligible) & existing_ids)
     if args.security_id:
         requested = set(args.security_id)
@@ -44,7 +44,7 @@ def main():
     start=target.date().isoformat(); end=(target.date()+timedelta(days=1)).isoformat()
     for i,sid in enumerate(ids,1):
         rec=eligible[sid]; ticker=str(rec["ticker"]); symbol=yahoo_symbol(ticker,sid)
-        key=f"backtest/ohlcv/{sid}.parquet"
+        key=f"{HISTORY_PREFIX}{sid}.parquet"
         try:
             raw=yf.download(symbol,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,threads=False,timeout=30)
             if raw.empty:
