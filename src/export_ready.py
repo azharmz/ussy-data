@@ -1,9 +1,4 @@
-"""Publish a ready-only rolling dataset in the private R2 bucket.
-
-Membership and original OHLCV remain untouched. No Yahoo downloads.
-READY never publishes the current New York calendar date: provider daily bars for
-that date are not authoritative until the calendar rolls to the next NY day.
-"""
+"""Publish a ready-only rolling dataset in the private R2 bucket."""
 from __future__ import annotations
 from compliance import is_eligible
 import hashlib
@@ -12,9 +7,7 @@ import json
 import os
 from datetime import UTC, datetime
 from uuid import uuid4
-from zoneinfo import ZoneInfo
-
-NY = ZoneInfo("America/New_York")
+from us_market_finalization import finalized_through
 
 
 def select_ready_ids(readiness, membership, snapshot):
@@ -28,8 +21,8 @@ def select_ready_ids(readiness, membership, snapshot):
     if not isinstance(ids, list) or not all(isinstance(s, str) and s for s in ids):
         raise ValueError("Invalid ready_security_ids")
     selected = set(ids)
-    if readiness.get('confirmed_compliant') != len(compliant):
-        raise ValueError('Readiness eligibility count is stale; rebuild rolling first')
+    if readiness.get("confirmed_compliant") != len(compliant):
+        raise ValueError("Readiness eligibility count is stale; rebuild rolling first")
     if not selected or len(selected) != len(ids) or len(selected) != readiness.get("ready"):
         raise ValueError("Empty, duplicate, or inconsistent ready IDs")
     if not selected.issubset(compliant):
@@ -40,17 +33,17 @@ def select_ready_ids(readiness, membership, snapshot):
     return selected
 
 
-def finalized_ready_frame(frame, ny_today=None):
-    """Exclude every current-NY-date row, including rows already persisted earlier."""
+def finalized_ready_frame(frame, cutoff=None):
+    """Keep rows only through the shared safely-finalized US-session cutoff."""
     import pandas as pd
-    cutoff = ny_today or datetime.now(tz=NY).date()
+    cutoff = cutoff or finalized_through()
     dates = pd.to_datetime(frame["date"], errors="raise").dt.date
-    result = frame.loc[dates < cutoff].copy()
+    result = frame.loc[dates <= cutoff].copy()
     if result.empty:
-        raise RuntimeError(f"READY has no completed daily bars before NY date {cutoff}")
+        raise RuntimeError(f"READY has no finalized daily bars through {cutoff}")
     dropped = len(frame) - len(result)
     if dropped:
-        print(f"READY_FINALIZATION_FILTER: excluded {dropped} current-NY-date row(s) for {cutoff}", flush=True)
+        print(f"READY_FINALIZATION_FILTER: cutoff={cutoff} excluded_rows={dropped}", flush=True)
     return result
 
 
@@ -118,13 +111,13 @@ def main():
     ids = select_ready_ids(readiness, json.loads(member_raw), snapshot)
     rolling_raw, rolling_etag = read("production/rolling/latest.parquet")
     frame = filter_rolling(pd.read_parquet(io.BytesIO(rolling_raw)), readiness, ids)
-    frame = finalized_ready_frame(frame)
-    # A current-date exclusion can remove one bar from some securities. READY still
-    # requires the configured minimum after the exclusion.
+    cutoff = finalized_through()
+    frame = finalized_ready_frame(frame, cutoff=cutoff)
     post_counts = frame.groupby("security_id").size()
     if set(post_counts.index.astype(str)) != ids or (post_counts < readiness["minimum_ready_bars"]).any():
         raise RuntimeError("READY finalization filter violates minimum history coverage")
     terminal = terminal_date_summary(frame)
+    print(f"READY finalization: finalized_through={cutoff}", flush=True)
     print("READY terminal-date summary:", json.dumps(terminal, sort_keys=True))
     for key, etag in [("universe/current.json", current_etag), (member_key, member_etag),
                       ("production/rolling/readiness.json", ready_etag), ("production/rolling/latest.parquet", rolling_etag)]:
@@ -141,7 +134,8 @@ def main():
         "securities": len(ids), "rows": len(frame), "security_ids": sorted(ids),
         "minimum_ready_bars": readiness["minimum_ready_bars"], "rolling_bars_target": readiness["rolling_bars_target"],
         "parquet_key": key, "sha256": hashlib.sha256(body).hexdigest(),
-        "policy": "active_compliant_and_ready; current NY calendar date excluded; modal terminal date must equal global max date",
+        "policy": "active_compliant_and_ready; US daily bars eligible after regular close plus 90m safety buffer; modal terminal date must equal global max date",
+        "finalized_through": cutoff.isoformat(),
         **terminal,
     }
     s3.put_object(Bucket=bucket, Key="production/ready/current.json", Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
