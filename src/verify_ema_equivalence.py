@@ -49,6 +49,22 @@ def history(s3, bucket: str, security_id: str) -> pd.DataFrame:
     return pd.read_parquet(io.BytesIO(body), engine="pyarrow")
 
 
+def history_through_ready_cutoff(frame: pd.DataFrame, cutoff: str | pd.Timestamp, security_id: str) -> pd.DataFrame:
+    """Return canonical history only through the READY lineage cutoff.
+
+    Canonical history may legitimately contain a newer provider bar than the currently
+    promoted READY snapshot. Equivalence must compare the candidate against the same
+    information set used to build it, not against that newer leading edge.
+    """
+    data = frame.copy()
+    data["date"] = pd.to_datetime(data["date"], errors="raise").dt.tz_localize(None).dt.normalize()
+    cutoff_date = pd.Timestamp(cutoff).tz_localize(None).normalize()
+    data = data.loc[data["date"] <= cutoff_date].copy()
+    if data.empty:
+        raise RuntimeError(f"Canonical history has no rows through READY cutoff for {security_id}")
+    return data
+
+
 def select_equivalence_ids(state: pd.DataFrame, manifest: dict, sample_size: int) -> tuple[list[str], str]:
     ids = sorted(state["security_id"].astype(str))
     required = set(map(str, manifest.get("bootstrap_security_ids", []))) | set(map(str, manifest.get("rebuild_security_ids", [])))
@@ -70,7 +86,10 @@ def select_equivalence_ids(state: pd.DataFrame, manifest: dict, sample_size: int
 def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, args: argparse.Namespace) -> dict:
     selected, mode = select_equivalence_ids(state, manifest, args.sample_size)
     required_count = len(set(manifest.get("bootstrap_security_ids", [])) | set(manifest.get("rebuild_security_ids", [])))
-    print(f"EMA equivalence: mode={mode}, verifying {len(selected)} securities ({required_count} required)", flush=True)
+    cutoff = manifest.get("source_ready_as_of_date") or manifest.get("as_of_date_max")
+    if not cutoff:
+        raise RuntimeError("EMA candidate manifest lacks READY cutoff lineage")
+    print(f"EMA equivalence: mode={mode}, verifying {len(selected)} securities ({required_count} required) at READY cutoff {cutoff}", flush=True)
     state_by_id = state.set_index("security_id")
     max_abs = 0.0
     max_rel = 0.0
@@ -79,7 +98,8 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
     failed_ids: set[str] = set()
     total = len(selected)
     for done, security_id in enumerate(selected, start=1):
-        reference = bootstrap_state(history(s3, bucket, security_id), security_id)
+        reference_history = history_through_ready_cutoff(history(s3, bucket, security_id), cutoff, security_id)
+        reference = bootstrap_state(reference_history, security_id)
         persisted = state_by_id.loc[security_id]
         if pd.Timestamp(reference["as_of_date"]).normalize() != pd.Timestamp(persisted["as_of_date"]).normalize():
             failures.append(f"{security_id}: as_of_date mismatch")
@@ -102,6 +122,7 @@ def equivalence_report(s3, bucket: str, state: pd.DataFrame, manifest: dict, arg
             print(f"EMA equivalence progress: {done}/{total}; numeric_failures={len(failures)}; classification_mismatches={mismatches}", flush=True)
     report = {
         "verified": len(selected), "required_verified": required_count, "mode": mode,
+        "ready_cutoff": str(pd.Timestamp(cutoff).date()),
         "rtol": args.rtol, "atol": args.atol, "max_abs_error": max_abs,
         "max_relative_error": max_rel, "classification_mismatches": mismatches,
         "numeric_failures": len(failures),
@@ -171,6 +192,12 @@ def main() -> None:
     lineage = (manifest.get("source_ready_parquet_key"), manifest.get("source_ready_sha256"))
     if lineage != (ready.get("parquet_key"), ready.get("sha256")):
         raise RuntimeError("EMA candidate is not aligned with current ready source")
+    ready_cutoff = ready.get("as_of_date") or manifest.get("as_of_date_max")
+    if not ready_cutoff:
+        raise RuntimeError("Current READY pointer lacks an as-of cutoff")
+    if manifest.get("as_of_date_max") != ready_cutoff:
+        raise RuntimeError("EMA candidate as-of does not match current READY cutoff")
+    manifest["source_ready_as_of_date"] = ready_cutoff
 
     try:
         report = equivalence_report(s3, bucket, state, manifest, args)
