@@ -8,6 +8,7 @@ import os
 from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 from ready_snapshot_guard import decide_ready_publication
+from ready_late_arrival_guard import is_pure_late_arrival_window_advance
 from us_market_finalization import finalized_through
 
 
@@ -137,6 +138,32 @@ def main():
     buf = io.BytesIO(); frame.to_parquet(buf, engine="pyarrow", index=False, compression="zstd"); body = buf.getvalue()
     candidate_sha = hashlib.sha256(body).hexdigest()
     current_ready = read_optional_json("production/ready/current.json")
+
+    # Preserve one immutable canonical READY per trading date. A later provider arrival can
+    # legitimately advance one security's fixed rolling window after that date was already
+    # published. Only when a strict semantic comparison proves a pure forward window shift
+    # with unchanged overlap do we defer it to the next trading-date snapshot. Every other
+    # same-day content difference still reaches decide_ready_publication() and fails closed.
+    if (current_ready and current_ready.get("as_of_date") == terminal["as_of_date"]
+            and current_ready.get("sha256") != candidate_sha):
+        canonical_raw, _ = read(current_ready["parquet_key"])
+        canonical = pd.read_parquet(io.BytesIO(canonical_raw))
+        safe_late_arrival, evidence = is_pure_late_arrival_window_advance(
+            canonical, frame, terminal["as_of_date"]
+        )
+        if safe_late_arrival:
+            print(
+                "READY_SAME_DAY_LATE_ARRIVAL_DEFERRED: " + json.dumps(evidence, sort_keys=True),
+                flush=True,
+            )
+            print(
+                f"READY canonical snapshot REUSE: as_of_date={terminal['as_of_date']} "
+                f"canonical_sha256={current_ready['sha256']} candidate_sha256={candidate_sha} "
+                f"key={current_ready['parquet_key']}",
+                flush=True,
+            )
+            return
+
     decision = decide_ready_publication(current_ready, terminal["as_of_date"], candidate_sha)
     if decision == "REUSE":
         print(
