@@ -1,0 +1,19 @@
+name: Corporate action split contract validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/run-corporate-action-contract-validation'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Validate frozen split contract v1
+        run: python src/validate_corporate_action_split_contract.py
