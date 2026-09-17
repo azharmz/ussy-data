@@ -1,7 +1,8 @@
 """Deterministic validation harness for corporate-action split contract v1.
 
 No network and no R2 writes. This validates arithmetic, temporal, identity,
-conflict, malformed-source, and pointer-last publication semantics before pilot.
+conflict, malformed-source, immutable correction lineage, and pointer-last
+publication semantics before pilot.
 """
 from __future__ import annotations
 
@@ -86,14 +87,23 @@ class FakeObjectStore:
         self.objects[key] = body
         self.write_order.append(key)
 
+    def put_immutable(self, key: str, body: bytes) -> None:
+        prior = self.objects.get(key)
+        if prior is not None:
+            if prior != body:
+                raise ValueError("immutable run artifact conflict")
+            return
+        self.objects[key] = body
+        self.write_order.append(key)
+
 
 def publish_validated_run(store: FakeObjectStore, run_id: str, events_body: bytes, manifest_body: bytes, *, validation_passed: bool) -> None:
-    """Minimal publication-order model: immutable artifacts first, pointer LAST."""
+    """Immutable run artifacts first; mutable current pointer LAST."""
     if not validation_passed:
         raise ValueError("validation must pass before publication")
     prefix = f"corporate_actions/splits/runs/{run_id}"
-    store.put(f"{prefix}/events.parquet", events_body)
-    store.put(f"{prefix}/manifest.json", manifest_body)
+    store.put_immutable(f"{prefix}/events.parquet", events_body)
+    store.put_immutable(f"{prefix}/manifest.json", manifest_body)
     store.put("corporate_actions/splits/current.json", (prefix + "\n").encode())
 
 
@@ -108,9 +118,7 @@ def run_checks() -> dict[str, str]:
     assert normalize_raw_price(10.0, 0.1) == 100.0
     assert normalize_share_volume(1000.0, 0.1) == 100.0
 
-    # Effective-date event cannot leak into an earlier as-of date.
     assert cumulative_factor([nvda], sid, date(2024, 6, 7), date(2024, 6, 9)) == 1.0
-    # Event does not adjust rows on/after its effective date.
     assert cumulative_factor([nvda], sid, date(2024, 6, 10), date(2024, 6, 10)) == 1.0
     assert cumulative_factor([reverse], reverse.security_id, date(2024, 4, 30), date(2024, 5, 1)) == 0.1
 
@@ -139,9 +147,27 @@ def run_checks() -> dict[str, str]:
             pass
 
     store = FakeObjectStore()
-    publish_validated_run(store, "validation", b"events", b"manifest", validation_passed=True)
+    publish_validated_run(store, "run-a", b"events-v1", b"manifest-v1", validation_passed=True)
     assert store.write_order[-1] == "corporate_actions/splits/current.json"
-    assert len(store.write_order) == 3
+    old_events = store.objects["corporate_actions/splits/runs/run-a/events.parquet"]
+
+    # Exact rerun is idempotent: immutable artifacts are reused, pointer can refresh.
+    publish_validated_run(store, "run-a", b"events-v1", b"manifest-v1", validation_passed=True)
+    assert store.objects["corporate_actions/splits/runs/run-a/events.parquet"] == old_events
+
+    # Same run ID with changed provider evidence must fail; correction needs a new run.
+    try:
+        publish_validated_run(store, "run-a", b"events-CORRECTED", b"manifest-v2", validation_passed=True)
+        raise AssertionError("immutable conflict expected")
+    except ValueError:
+        pass
+    assert store.objects["corporate_actions/splits/runs/run-a/events.parquet"] == old_events
+
+    publish_validated_run(store, "run-b", b"events-CORRECTED", b"manifest-v2", validation_passed=True)
+    assert store.objects["corporate_actions/splits/runs/run-a/events.parquet"] == old_events
+    assert store.objects["corporate_actions/splits/current.json"] == b"corporate_actions/splits/runs/run-b\n"
+    assert store.write_order[-1] == "corporate_actions/splits/current.json"
+
     failed = FakeObjectStore()
     try:
         publish_validated_run(failed, "bad", b"events", b"manifest", validation_passed=False)
@@ -157,6 +183,9 @@ def run_checks() -> dict[str, str]:
         "identity_fail_closed": "PASS",
         "duplicate_conflict": "PASS",
         "malformed_source": "PASS",
+        "idempotent_rerun": "PASS",
+        "provider_correction_new_run": "PASS",
+        "immutable_run_artifacts": "PASS",
         "pointer_last": "PASS",
         "canonical_ohlcv_writes": "ZERO_BY_HARNESS",
     }
