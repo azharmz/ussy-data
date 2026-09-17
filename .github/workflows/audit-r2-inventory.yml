@@ -2,10 +2,6 @@ name: Audit R2 inventory
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/audit-r2-inventory.yml"
 
 permissions:
   contents: read
