@@ -2,6 +2,7 @@ name: Corporate action identity validation
 on:
   push:
     branches:
+      - main
       - 'feat/corporate-action-identity-lineage'
     paths:
       - 'src/corporate_action_identity.py'
