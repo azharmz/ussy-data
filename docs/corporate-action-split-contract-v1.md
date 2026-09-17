@@ -1,6 +1,6 @@
 # Corporate-Action Split Facts Contract v1
 
-Status: **FROZEN DESIGN / NOT YET PRODUCTION-MATERIALIZED**
+Status: **FROZEN DESIGN / VALIDATION IN PROGRESS / NOT YET PRODUCTION-MATERIALIZED**
 
 Owner: `azharmz/ussy-data`
 
@@ -26,11 +26,17 @@ Yahoo `Stock Splits` may be retained as independent validation evidence but must
 
 Dedicated Tiingo Corporate Actions endpoint is not required by v1 because current entitlement returned HTTP 403 during feasibility.
 
+### Tiingo request budget
+
+The currently configured Starter entitlement is governed as **maximum 50 requests/hour**. Corporate-action development/pilot workflows must declare and enforce a bounded request budget below that ceiling. Do not use full-universe one-request-per-symbol scans under this entitlement. Prefer cached/checkpointed evidence and narrowly scoped batches.
+
 ## Identity policy
 
 `security_id` is the primary key identity. `provider_ticker` is evidence/alias only.
 
 A source ticker may be attached to a security only through canonical `ussy-data` identity/alias evidence. Missing or ambiguous mapping fails closed. Ticker alone never creates or merges a security identity.
+
+A split can itself change security identifiers. GE's 2021 1-for-8 reverse split is a concrete boundary case: the company stated that split-adjusted trading began 2021-08-02 with a new ISIN. Therefore current-ISIN lookup alone is not sufficient proof of historical identity continuity. Historical event attachment across an identifier change requires governed lineage/alias evidence; otherwise the event remains unresolved rather than guessed.
 
 ## Event schema
 
@@ -84,6 +90,7 @@ Runs are immutable. `current.json` is written LAST after validation.
 - validation case summary
 - content SHA256 + bytes for events parquet
 - source cutoff/as-of metadata
+- Tiingo request budget and actual request count
 
 ## Derived normalization boundary
 
@@ -98,18 +105,33 @@ That cumulative factor can support:
 
 These arithmetic transformations are data normalization only. TrendFoll remains responsible for how normalized inputs feed liquidity, ATR, tightness, or tradability.
 
-## Required validation gates before production
+## Validation evidence
 
-- known forward splits: NVDA 2024-06-10 10:1, AVGO 2024-07-15 10:1;
-- at least two additional forward splits;
-- at least two reverse splits;
-- identity mapping uniqueness;
-- ticker-change/alias case where available;
-- future-event exclusion (`effective_date > T` cannot affect T);
-- factor arithmetic tests for price and volume basis;
-- duplicate/conflicting-event fail-closed tests;
-- source HTTP/empty/malformed-response fail-closed tests;
-- immutable-run + pointer-last publication tests;
-- no writes to canonical OHLCV/READY/EMA namespaces.
+Deterministic contract validation:
 
-Only after these gates pass may a bounded pilot be published. Full-universe historical materialization is a later decision based on pilot coverage and unresolved-identity evidence.
+- Actions run `35237199105`: PASS.
+- forward/reverse arithmetic: PASS.
+- future-event exclusion: PASS.
+- identity fail-closed: PASS.
+- duplicate/conflict handling: PASS.
+- malformed-source handling: PASS.
+- pointer-last model: PASS.
+- canonical OHLCV writes: zero.
+
+Live reverse-split source validation:
+
+- Actions run `35241593520`: PASS, read-only, exactly **2 Tiingo requests**, zero R2 writes.
+- GE: Tiingo EOD `2021-08-02 splitFactor=0.125` (1-for-8): PASS.
+- AIG: Tiingo EOD `2009-07-01 splitFactor=0.05` (1-for-20): PASS.
+
+Together with prior live forward cases NVDA, AVGO, WMT, and CMG, provider factor direction is now evidenced for both forward and reverse splits.
+
+## Remaining gates before bounded publication pilot
+
+- freeze/implement Tiingo-specific historical alias/identity lineage rule for identifier-change cases;
+- validate at least one governed ticker-change/alias lifecycle where available;
+- idempotent rerun/provider-correction lineage test;
+- immutable-run + pointer-last test against a non-production fake/test namespace or equivalent isolated store;
+- prove no writes to canonical OHLCV/READY/EMA namespaces.
+
+Only after these gates pass may a bounded pilot be published. Full-universe historical materialization is a later decision based on pilot coverage and unresolved-identity evidence, and must respect Tiingo's request ceiling.
