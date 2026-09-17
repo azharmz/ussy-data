@@ -16,8 +16,9 @@ on:
         required: true
         default: "10"
   schedule:
-    # 10:07 WIB / 11:07 WITA. Avoid top-of-hour GitHub Actions schedule congestion.
-    - cron: "7 3 * * 1-5"
+    # 05:07 UTC = 13:07 WITA. This is after NY midnight in both EDT and EST,
+    # so the prior US session is a completed calendar day before ingestion.
+    - cron: "7 5 * * 1-5"
   push:
     branches: [main]
     paths:
@@ -36,6 +37,7 @@ on:
       - 'src/ema_state.py'
       - 'tests/test_ema_state.py'
       - 'tests/test_publish_ema_state.py'
+      - 'tests/test_ready_finalization.py'
       - 'src/audit_screening_freshness.py'
       - 'src/publish_web_status.py'
       - 'src/r2_storage_guard.py'
@@ -65,22 +67,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
-
       - name: Run unit tests
         run: python -m unittest discover -s tests
-
       - name: Guard shared R2 bucket before writes
         run: python src/r2_storage_guard.py
-
       - name: Onboard missing full histories for new universe members
         shell: bash
         env:
@@ -91,7 +88,6 @@ jobs:
             --max-new-members 50 \
             --max-retries 3 \
             --request-delay 2.0
-
       - name: Update finalized daily and rolling OHLCV
         shell: bash
         env:
@@ -105,18 +101,13 @@ jobs:
             --minimum-ready-bars 250 \
             --batch-size "${BATCH_SIZE}" \
             --request-delay "${REQUEST_DELAY}"
-
       - name: Export ready-only strategy data
         run: python src/export_ready.py
-
       - name: Build non-production adjusted EMA candidate
         run: python src/publish_ema_state.py
-
       - name: Validate and promote shared adjusted EMA state
         run: python src/verify_ema_equivalence.py --sample-size 50
-
       - name: Audit recorded earnings freshness for active compliant universe
         run: python src/audit_screening_freshness.py --snapshot-date current
-
       - name: Publish read-only web status
         run: python src/publish_web_status.py
