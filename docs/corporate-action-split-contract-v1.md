@@ -36,7 +36,13 @@ The currently configured Starter entitlement is governed as **maximum 50 request
 
 A source ticker may be attached to a security only through canonical `ussy-data` identity/alias evidence. Missing or ambiguous mapping fails closed. Ticker alone never creates or merges a security identity.
 
-A split can itself change security identifiers. GE's 2021 1-for-8 reverse split is a concrete boundary case: the company stated that split-adjusted trading began 2021-08-02 with a new ISIN. Therefore current-ISIN lookup alone is not sufficient proof of historical identity continuity. Historical event attachment across an identifier change requires governed lineage/alias evidence; otherwise the event remains unresolved rather than guessed.
+Historical aliases are explicitly provider-scoped and date-bounded. Resolution requires exactly one reviewed alias whose validity interval contains the corporate-action effective date. Unknown aliases, out-of-range aliases, and overlapping aliases that map the same provider ticker to multiple securities fail closed.
+
+The first frozen lifecycle case is `EVTV -> AZIO` for canonical security `US29414V3087`. Company/Nasdaq evidence states that AZIO began trading at market open on 2026-07-13 and that the ticker change did not affect the capital structure, CUSIP, or securityholder rights. Therefore the reviewed Tiingo alias intervals are EVTV through 2026-07-12 and AZIO from 2026-07-13. This validates a ticker-change lifecycle without changing canonical `security_id`.
+
+A split can itself change security identifiers. GE's 2021 1-for-8 reverse split is a separate boundary case: the company stated that split-adjusted trading began 2021-08-02 with a new ISIN. Therefore current-ISIN lookup alone is not sufficient proof of historical identity continuity. Cross-identifier continuity remains evidence-driven; without reviewed lineage, the event remains unresolved rather than guessed.
+
+Implementation: `src/corporate_action_identity.py`. The reviewed registry is intentionally small and additive; it is not a heuristic ticker-history database.
 
 ## Event schema
 
@@ -126,10 +132,16 @@ Live reverse-split source validation:
 
 Together with prior live forward cases NVDA, AVGO, WMT, and CMG, provider factor direction is now evidenced for both forward and reverse splits.
 
+Historical identity lifecycle validation:
+
+- EVTV -> AZIO, canonical `US29414V3087`: reviewed date-bounded lifecycle frozen.
+- unknown/out-of-range alias: fail closed.
+- overlapping reused ticker across different securities: registry validation fails closed.
+- non-overlapping ticker reuse can resolve deterministically by event date.
+- validation uses zero Tiingo requests and zero R2 writes.
+
 ## Remaining gates before bounded publication pilot
 
-- freeze/implement Tiingo-specific historical alias/identity lineage rule for identifier-change cases;
-- validate at least one governed ticker-change/alias lifecycle where available;
 - idempotent rerun/provider-correction lineage test;
 - immutable-run + pointer-last test against a non-production fake/test namespace or equivalent isolated store;
 - prove no writes to canonical OHLCV/READY/EMA namespaces.
