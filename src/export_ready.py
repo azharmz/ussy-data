@@ -6,7 +6,8 @@ import io
 import json
 import os
 from datetime import UTC, datetime
-from uuid import uuid4
+from botocore.exceptions import ClientError
+from ready_snapshot_guard import decide_ready_publication
 from us_market_finalization import finalized_through
 
 
@@ -100,9 +101,18 @@ def main():
     import pandas as pd
     from bootstrap_ohlcv import make_s3_client
     s3, bucket = make_s3_client(), os.environ["R2_BUCKET_NAME"]
+
     def read(key):
         obj = s3.get_object(Bucket=bucket, Key=key)
         return obj["Body"].read(), obj["ETag"]
+
+    def read_optional_json(key):
+        try:
+            raw, _ = read(key)
+        except s3.exceptions.NoSuchKey:
+            return None
+        return json.loads(raw)
+
     current_raw, current_etag = read("universe/current.json")
     current = json.loads(current_raw); snapshot = current["snapshot_date"]
     ready_raw, ready_etag = read("production/rolling/readiness.json"); readiness = json.loads(ready_raw)
@@ -123,8 +133,31 @@ def main():
                       ("production/rolling/readiness.json", ready_etag), ("production/rolling/latest.parquet", rolling_etag)]:
         if s3.head_object(Bucket=bucket, Key=key)["ETag"] != etag:
             raise RuntimeError("Source changed during export; retry after update finishes")
+
     buf = io.BytesIO(); frame.to_parquet(buf, engine="pyarrow", index=False, compression="zstd"); body = buf.getvalue()
-    key = f"production/ready/runs/{uuid4().hex}.parquet"
+    candidate_sha = hashlib.sha256(body).hexdigest()
+    current_ready = read_optional_json("production/ready/current.json")
+    decision = decide_ready_publication(current_ready, terminal["as_of_date"], candidate_sha)
+    if decision == "REUSE":
+        print(
+            f"READY canonical snapshot REUSE: as_of_date={terminal['as_of_date']} "
+            f"sha256={candidate_sha} key={current_ready['parquet_key']}",
+            flush=True,
+        )
+        print("Ready dataset unchanged: production/ready/current.json")
+        return
+
+    # One deterministic canonical object key per finalized trading date. Existing UUID-keyed
+    # snapshots remain valid lineage; same-day reruns are handled above and never create another.
+    key = f"production/ready/runs/{terminal['as_of_date']}.parquet"
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey", "NotFound"):
+            raise
+    else:
+        raise RuntimeError(f"READY canonical date key already exists without matching current lineage: {key}")
+
     s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/vnd.apache.parquet")
     if s3.head_object(Bucket=bucket, Key=key)["ContentLength"] != len(body):
         raise RuntimeError("Ready export size verification failed")
@@ -133,8 +166,8 @@ def main():
         "snapshot_date": snapshot, "readiness_created_at": readiness["created_at"],
         "securities": len(ids), "rows": len(frame), "security_ids": sorted(ids),
         "minimum_ready_bars": readiness["minimum_ready_bars"], "rolling_bars_target": readiness["rolling_bars_target"],
-        "parquet_key": key, "sha256": hashlib.sha256(body).hexdigest(),
-        "policy": "active_compliant_and_ready; US daily bars eligible after regular close plus 90m safety buffer; modal terminal date must equal global max date",
+        "parquet_key": key, "sha256": candidate_sha,
+        "policy": "active_compliant_and_ready; one immutable canonical snapshot per finalized trading date; US daily bars eligible after regular close plus 90m safety buffer; modal terminal date must equal global max date",
         "finalized_through": cutoff.isoformat(),
         **terminal,
     }
