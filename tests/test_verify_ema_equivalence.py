@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from verify_ema_equivalence import select_equivalence_ids
+from verify_ema_equivalence import history_through_ready_cutoff, select_equivalence_ids
 
 
 class EMAEquivalenceSelectionTests(unittest.TestCase):
@@ -33,6 +33,21 @@ class EMAEquivalenceSelectionTests(unittest.TestCase):
         manifest = {"bootstrap_security_ids": ["X"], "rebuild_security_ids": []}
         with self.assertRaises(RuntimeError):
             select_equivalence_ids(self.state(), manifest, 2)
+
+    def test_history_is_cut_at_ready_as_of_not_newer_provider_bar(self):
+        history = pd.DataFrame({
+            "date": ["2026-09-15", "2026-09-16"],
+            "adj_close": [100.0, 999.0],
+        })
+        result = history_through_ready_cutoff(history, "2026-09-15", "SEC1")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[-1]["date"], pd.Timestamp("2026-09-15"))
+        self.assertEqual(result.iloc[-1]["adj_close"], 100.0)
+
+    def test_history_cutoff_fails_closed_when_no_reference_rows_exist(self):
+        history = pd.DataFrame({"date": ["2026-09-16"], "adj_close": [100.0]})
+        with self.assertRaisesRegex(RuntimeError, "no rows through READY cutoff"):
+            history_through_ready_cutoff(history, "2026-09-15", "SEC1")
 
 
 if __name__ == "__main__":
