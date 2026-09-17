@@ -1,5 +1,4 @@
 from __future__ import annotations
-from bootstrap_ohlcv import load_membership, object_exists
 
 import argparse
 import json
@@ -11,14 +10,17 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 
 from bootstrap_ohlcv import (
+    HISTORY_MANIFEST_PREFIX,
+    HISTORY_PREFIX,
     Result,
     download_history,
+    load_membership,
     make_s3_client,
     normalize_history,
+    object_exists,
     upload_parquet,
     yahoo_symbol,
 )
-
 
 LOG = logging.getLogger("repair_ohlcv")
 
@@ -40,7 +42,7 @@ def main() -> None:
 
     bucket = os.environ["R2_BUCKET_NAME"]
     s3 = make_s3_client()
-    queue_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/repair_queue.json"
+    queue_key = f"{HISTORY_MANIFEST_PREFIX}bootstrap/{args.snapshot_date}/repair_queue.json"
     queue = json.loads(s3.get_object(Bucket=bucket, Key=queue_key)["Body"].read())
     eligible = {str(row['security_id']): row for row in load_membership(s3, bucket, args.snapshot_date)}
     records = [eligible[str(row['security_id'])] for row in queue.get("records", [])
@@ -54,7 +56,7 @@ def main() -> None:
         security_id = str(record["security_id"])
         ticker = str(record["ticker"])
         symbol = yahoo_symbol(ticker, security_id)
-        key = f"backtest/ohlcv/{security_id}.parquet"
+        key = f"{HISTORY_PREFIX}{security_id}.parquet"
         if object_exists(s3, bucket, key):
             results.append(Result(security_id, ticker, symbol, 'existing', object_key=key))
             continue
@@ -94,7 +96,7 @@ def main() -> None:
         },
         "results": [asdict(row) for row in results],
     }
-    report_key = f"backtest/manifests/bootstrap/{args.snapshot_date}/repair-run-{run_id}-{attempt}.json"
+    report_key = f"{HISTORY_MANIFEST_PREFIX}bootstrap/{args.snapshot_date}/repair-run-{run_id}-{attempt}.json"
     s3.put_object(Bucket=bucket, Key=report_key, Body=json.dumps(report, indent=2).encode(), ContentType="application/json")
     LOG.info("Repair report: %s", report_key)
     LOG.info("Summary: %s", report["summary"])
@@ -103,5 +105,3 @@ def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     main()
-
-
