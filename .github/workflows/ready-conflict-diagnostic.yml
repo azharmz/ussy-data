@@ -23,5 +23,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Unit-test READY guards
+        run: python -m unittest tests.test_ready_snapshot_guard tests.test_ready_late_arrival_guard
       - name: Diff canonical READY against current candidate
         run: python src/diagnose_ready_same_day_conflict.py
