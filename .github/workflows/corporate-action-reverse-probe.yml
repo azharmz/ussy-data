@@ -1,0 +1,21 @@
+name: Corporate action reverse split probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/run-corporate-action-reverse-probe'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Probe two known reverse splits
+        run: python src/probe_reverse_split_evidence.py
