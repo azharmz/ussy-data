@@ -29,6 +29,8 @@ on:
       - 'src/run_production_finalized.py'
       - 'src/update_production.py'
       - 'src/export_ready.py'
+      - 'src/load_ready.py'
+      - 'tests/test_load_ready.py'
       - 'src/publish_ema_state.py'
       - 'src/verify_ema_equivalence.py'
       - 'src/ema_state.py'
