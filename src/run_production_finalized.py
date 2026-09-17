@@ -1,37 +1,43 @@
-"""Run production OHLCV using only completed New York calendar days.
-
-Yahoo can expose a same-day interval=1d bar with inconsistent cross-symbol
-availability even hours after the US close. Therefore the current New York date
-is never ingested. The just-closed session becomes eligible after NY midnight.
-"""
+"""Run production OHLCV using only safely finalized US daily bars."""
 from __future__ import annotations
-
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 import update_production
+from us_market_finalization import finalized_through
 
-NY = ZoneInfo("America/New_York")
 _original_normalize_history = update_production.normalize_history
+_stats = {"calls": 0, "excluded_rows": 0, "excluded_dates": {}}
 
 
 def normalize_finalized_history(*args, **kwargs):
     frame = _original_normalize_history(*args, **kwargs)
-    ny_today = datetime.now(tz=NY).date()
+    cutoff = finalized_through()
+    _stats["calls"] += 1
     if not frame.empty:
         dates = pd.to_datetime(frame["date"], errors="coerce").dt.date
-        dropped = int((dates >= ny_today).sum())
+        mask = dates > cutoff
+        dropped = int(mask.sum())
         if dropped:
-            print(f"FINALIZATION_FILTER: excluded {dropped} non-finalized {ny_today} daily bar(s)", flush=True)
-            frame = frame.loc[dates < ny_today].copy()
+            _stats["excluded_rows"] += dropped
+            for value, count in dates.loc[mask].value_counts().items():
+                key = str(value)
+                _stats["excluded_dates"][key] = _stats["excluded_dates"].get(key, 0) + int(count)
+            frame = frame.loc[~mask].copy()
     return frame
 
 
 def main() -> None:
     update_production.normalize_history = normalize_finalized_history
-    update_production.main()
+    try:
+        update_production.main()
+    finally:
+        print(
+            "FINALIZATION_FILTER_SUMMARY: "
+            f"finalized_through={finalized_through()} calls={_stats['calls']} "
+            f"excluded_rows={_stats['excluded_rows']} excluded_dates={_stats['excluded_dates']}",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
