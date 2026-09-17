@@ -6,6 +6,7 @@ import io
 import json
 import os
 from datetime import UTC, datetime
+from botocore.exceptions import ClientError
 from ready_snapshot_guard import decide_ready_publication
 from us_market_finalization import finalized_through
 
@@ -151,7 +152,7 @@ def main():
     key = f"production/ready/runs/{terminal['as_of_date']}.parquet"
     try:
         s3.head_object(Bucket=bucket, Key=key)
-    except s3.exceptions.ClientError as exc:
+    except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey", "NotFound"):
             raise
     else:
