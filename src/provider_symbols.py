@@ -7,6 +7,9 @@ YAHOO_ALIASES = {
     ('US74624M1027', 'PSTG'): 'P',
     ('US8248891090', 'SCVL'): 'SHOE',
     ('US9118053076', 'USEG'): 'BSIN',
+    # Envirotech Vehicles / Azio AI Holdings: Nasdaq ticker changed
+    # from EVTV to AZIO effective 2026-07-13. Security identity is unchanged.
+    ('US29414V2097', 'EVTV'): 'AZIO',
 }
 
 
