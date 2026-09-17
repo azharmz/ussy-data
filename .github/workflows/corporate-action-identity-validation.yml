@@ -1,0 +1,22 @@
+name: Corporate action identity validation
+on:
+  push:
+    branches:
+      - 'feat/corporate-action-identity-lineage'
+    paths:
+      - 'src/corporate_action_identity.py'
+      - 'tests/test_corporate_action_identity.py'
+      - '.github/workflows/corporate-action-identity-validation.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Validate identity lineage gate
+        run: python -m unittest tests.test_corporate_action_identity -v
