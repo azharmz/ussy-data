@@ -10,6 +10,7 @@ ACTIVE_HISTORY_FILES = [
     "src/repair_ohlcv.py",
     "src/repair_partial_daily_bar.py",
     "src/publish_ema_state.py",
+    "src/verify_ema_equivalence.py",
 ]
 
 

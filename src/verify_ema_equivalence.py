@@ -45,7 +45,7 @@ def read_json(s3, bucket: str, key: str) -> dict:
 
 
 def history(s3, bucket: str, security_id: str) -> pd.DataFrame:
-    body = s3.get_object(Bucket=bucket, Key=f"backtest/ohlcv/{security_id}.parquet")["Body"].read()
+    body = s3.get_object(Bucket=bucket, Key=f"history/ohlcv/{security_id}.parquet")["Body"].read()
     return pd.read_parquet(io.BytesIO(body), engine="pyarrow")
 
 
