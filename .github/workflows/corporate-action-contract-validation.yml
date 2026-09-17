@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - '.github/run-corporate-action-contract-validation'
+      - 'src/validate_corporate_action_split_contract.py'
+      - '.github/workflows/corporate-action-contract-validation.yml'
 permissions:
   contents: read
 jobs:
