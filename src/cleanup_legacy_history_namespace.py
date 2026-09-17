@@ -26,29 +26,11 @@ def list_objects(s3, bucket: str, prefix: str) -> dict[str, int]:
     return result
 
 
-def verify_coverage(s3, bucket: str) -> tuple[dict[str, int], int, int]:
-    legacy_all: dict[str, int] = {}
-    total_bytes = 0
-    advanced = 0
-    failures: list[str] = []
-    for legacy_prefix, canonical_prefix in LEGACY_TO_CANONICAL.items():
-        legacy = list_objects(s3, bucket, legacy_prefix)
-        canonical = list_objects(s3, bucket, canonical_prefix)
-        for key, size in legacy.items():
-            target = canonical_prefix + key.removeprefix(legacy_prefix)
-            target_size = canonical.get(target)
-            if target_size is None:
-                failures.append(f"missing target: {key} -> {target}")
-            elif target_size <= 0:
-                failures.append(f"empty target: {target}")
-            elif target_size != size:
-                advanced += 1
-        legacy_all.update(legacy)
-        total_bytes += sum(legacy.values())
-    if failures:
-        preview = "\n".join(failures[:20])
-        raise RuntimeError(f"legacy history coverage verification failed ({len(failures)} failure(s)):\n{preview}")
-    return legacy_all, total_bytes, advanced
+def canonical_inventory(s3, bucket: str) -> dict[str, int]:
+    result = {}
+    result.update(list_objects(s3, bucket, HISTORY_PREFIX))
+    result.update(list_objects(s3, bucket, HISTORY_MANIFEST_PREFIX))
+    return result
 
 
 def canonical_target(legacy_key: str) -> str:
@@ -58,13 +40,36 @@ def canonical_target(legacy_key: str) -> str:
     raise RuntimeError(f"refusing out-of-scope key: {legacy_key}")
 
 
+def verify_coverage(s3, bucket: str) -> tuple[dict[str, int], int, int]:
+    legacy_all: dict[str, int] = {}
+    for prefix in LEGACY_TO_CANONICAL:
+        legacy_all.update(list_objects(s3, bucket, prefix))
+    canonical = canonical_inventory(s3, bucket)
+    failures = []
+    advanced = 0
+    for key, size in legacy_all.items():
+        target = canonical_target(key)
+        target_size = canonical.get(target)
+        if target_size is None:
+            failures.append(f"missing target: {key} -> {target}")
+        elif target_size <= 0:
+            failures.append(f"empty target: {target}")
+        elif target_size != size:
+            advanced += 1
+    if failures:
+        raise RuntimeError(
+            f"legacy history coverage verification failed ({len(failures)} failure(s)):\n"
+            + "\n".join(failures[:20])
+        )
+    return legacy_all, sum(legacy_all.values()), advanced
+
+
 def main() -> None:
     args = parse_args()
     bucket = os.environ["R2_BUCKET_NAME"]
     s3 = make_s3_client()
     legacy, total_bytes, advanced = verify_coverage(s3, bucket)
-    mode = "APPLY" if args.apply else "DRY_RUN"
-    print(f"mode: {mode}", flush=True)
+    print(f"mode: {'APPLY' if args.apply else 'DRY_RUN'}", flush=True)
     print(f"verified legacy objects covered by canonical keys: {len(legacy)}", flush=True)
     print(f"legacy bytes eligible for cleanup: {total_bytes}", flush=True)
     print(f"canonical objects whose size advanced since migration: {advanced}", flush=True)
@@ -72,21 +77,31 @@ def main() -> None:
     print("audit/.../before/backtest/... is outside deletion scope", flush=True)
     if not args.apply:
         return
-    for index, key in enumerate(sorted(legacy), 1):
-        canonical_target(key)  # scope assertion before every destructive call
-        s3.delete_object(Bucket=bucket, Key=key)
-        if index % 100 == 0 or index == len(legacy):
-            print(f"delete progress {index}/{len(legacy)}", flush=True)
+
+    keys = sorted(legacy)
+    for start in range(0, len(keys), 1000):
+        chunk = keys[start:start + 1000]
+        for key in chunk:
+            canonical_target(key)
+        response = s3.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": key} for key in chunk], "Quiet": True},
+        )
+        errors = response.get("Errors", [])
+        if errors:
+            raise RuntimeError(f"R2 batch deletion reported {len(errors)} error(s): {errors[:5]}")
+        print(f"delete progress {min(start + len(chunk), len(keys))}/{len(keys)}", flush=True)
+
     remaining = {}
     for prefix in LEGACY_TO_CANONICAL:
         remaining.update(list_objects(s3, bucket, prefix))
     if remaining:
         raise RuntimeError(f"legacy root prefixes not empty after cleanup: {len(remaining)} object(s)")
-    for legacy_key in legacy:
-        target = canonical_target(legacy_key)
-        actual = int(s3.head_object(Bucket=bucket, Key=target).get("ContentLength", 0))
-        if actual <= 0:
-            raise RuntimeError(f"canonical object missing/empty after cleanup: {target}")
+
+    canonical = canonical_inventory(s3, bucket)
+    missing = [canonical_target(key) for key in legacy if canonical.get(canonical_target(key), 0) <= 0]
+    if missing:
+        raise RuntimeError(f"canonical coverage lost during cleanup: {missing[:20]}")
     print("result: VERIFIED", flush=True)
     print("legacy root backtest history namespace deleted; canonical history retained", flush=True)
 
