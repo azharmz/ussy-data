@@ -1,8 +1,8 @@
 """Publish a ready-only rolling dataset in the private R2 bucket.
 
 Membership and original OHLCV remain untouched. No Yahoo downloads.
-READY publication fails closed when a tiny provider-leading edge is newer than
-the modal terminal date across ready securities.
+READY never publishes the current New York calendar date: provider daily bars for
+that date are not authoritative until the calendar rolls to the next NY day.
 """
 from __future__ import annotations
 from compliance import is_eligible
@@ -12,6 +12,9 @@ import json
 import os
 from datetime import UTC, datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+NY = ZoneInfo("America/New_York")
 
 
 def select_ready_ids(readiness, membership, snapshot):
@@ -37,13 +40,21 @@ def select_ready_ids(readiness, membership, snapshot):
     return selected
 
 
-def terminal_date_summary(frame):
-    """Return terminal-date lineage and reject a partial newer provider edge.
+def finalized_ready_frame(frame, ny_today=None):
+    """Exclude every current-NY-date row, including rows already persisted earlier."""
+    import pandas as pd
+    cutoff = ny_today or datetime.now(tz=NY).date()
+    dates = pd.to_datetime(frame["date"], errors="raise").dt.date
+    result = frame.loc[dates < cutoff].copy()
+    if result.empty:
+        raise RuntimeError(f"READY has no completed daily bars before NY date {cutoff}")
+    dropped = len(frame) - len(result)
+    if dropped:
+        print(f"READY_FINALIZATION_FILTER: excluded {dropped} current-NY-date row(s) for {cutoff}", flush=True)
+    return result
 
-    Older terminal dates can be legitimate (halts/delistings). A newer date than
-    the modal terminal date cannot be authoritative because most READY securities
-    have not reached it yet; publishing it would make global max(date) misleading.
-    """
+
+def terminal_date_summary(frame):
     terminal = frame.groupby("security_id")["date"].max()
     histogram = terminal.dt.date.astype(str).value_counts().sort_index()
     if histogram.empty:
@@ -107,6 +118,12 @@ def main():
     ids = select_ready_ids(readiness, json.loads(member_raw), snapshot)
     rolling_raw, rolling_etag = read("production/rolling/latest.parquet")
     frame = filter_rolling(pd.read_parquet(io.BytesIO(rolling_raw)), readiness, ids)
+    frame = finalized_ready_frame(frame)
+    # A current-date exclusion can remove one bar from some securities. READY still
+    # requires the configured minimum after the exclusion.
+    post_counts = frame.groupby("security_id").size()
+    if set(post_counts.index.astype(str)) != ids or (post_counts < readiness["minimum_ready_bars"]).any():
+        raise RuntimeError("READY finalization filter violates minimum history coverage")
     terminal = terminal_date_summary(frame)
     print("READY terminal-date summary:", json.dumps(terminal, sort_keys=True))
     for key, etag in [("universe/current.json", current_etag), (member_key, member_etag),
@@ -124,7 +141,7 @@ def main():
         "securities": len(ids), "rows": len(frame), "security_ids": sorted(ids),
         "minimum_ready_bars": readiness["minimum_ready_bars"], "rolling_bars_target": readiness["rolling_bars_target"],
         "parquet_key": key, "sha256": hashlib.sha256(body).hexdigest(),
-        "policy": "active_compliant_and_ready; modal terminal date must equal global max date",
+        "policy": "active_compliant_and_ready; current NY calendar date excluded; modal terminal date must equal global max date",
         **terminal,
     }
     s3.put_object(Bucket=bucket, Key="production/ready/current.json", Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
