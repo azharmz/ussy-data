@@ -1,8 +1,8 @@
 """Bootstrap full OHLCV history for newly eligible universe members only.
 
 This is the onboarding gate between a membership change and the normal production
-update. A security becomes operational only after its immutable full-history
-object exists under backtest/ohlcv/<security_id>.parquet and passes normal OHLCV
+update. A security becomes operational only after its canonical full-history
+object exists under history/ohlcv/<security_id>.parquet and passes normal OHLCV
 normalization/QC. Existing histories are never overwritten here.
 
 Reviewed operational/corporate-action dispositions are authoritative for retry
@@ -32,7 +32,7 @@ from bootstrap_ohlcv import (
 )
 
 LOG = logging.getLogger("bootstrap_missing_ohlcv")
-HISTORY_PREFIX = "backtest/ohlcv/"
+HISTORY_PREFIX = "history/ohlcv/"
 DEFAULT_POLICY = Path(__file__).resolve().parents[1] / "config" / "bootstrap-policy-2026-08-28.json"
 
 
@@ -62,7 +62,6 @@ def missing_members(membership: list[dict[str, Any]], existing_ids: set[str]) ->
 
 
 def load_deferred_policy(path: str | Path) -> dict[str, dict[str, Any]]:
-    """Return reviewed no-retry dispositions keyed by immutable security_id."""
     policy_path = Path(path)
     if not policy_path.exists():
         raise FileNotFoundError(f"Reviewed onboarding policy not found: {policy_path}")
@@ -129,8 +128,6 @@ def main() -> None:
     deferred_by_id = load_deferred_policy(args.policy)
     retryable, deferred = partition_retryable_missing(missing, deferred_by_id)
 
-    # The guardrail applies to actual network/bootstrap work, not reviewed
-    # no-retry dispositions that remain visible in the membership snapshot.
     if len(retryable) > args.max_new_members:
         raise RuntimeError(
             f"Refusing automatic bootstrap of {len(retryable)} retryable missing histories; "
@@ -139,10 +136,7 @@ def main() -> None:
 
     results: list[dict[str, Any]] = list(deferred)
     for row in deferred:
-        LOG.info(
-            "Skipping reviewed no-retry member %s (%s): %s",
-            row.get("ticker"), row.get("security_id"), row.get("reason"),
-        )
+        LOG.info("Skipping reviewed no-retry member %s (%s): %s", row.get("ticker"), row.get("security_id"), row.get("reason"))
 
     for position, record in enumerate(retryable):
         if position and args.request_delay:
@@ -155,54 +149,18 @@ def main() -> None:
         try:
             history = normalize_history(download_history(symbol, args.max_retries), security_id, ticker)
             upload_parquet(s3, bucket, key, history)
-            results.append({
-                "security_id": security_id,
-                "ticker": ticker,
-                "provider_symbol": symbol,
-                "status": "BOOTSTRAPPED",
-                "rows": len(history),
-                "first_date": history["date"].iloc[0].date().isoformat(),
-                "last_date": history["date"].iloc[-1].date().isoformat(),
-                "object_key": key,
-            })
+            results.append({"security_id": security_id, "ticker": ticker, "provider_symbol": symbol, "status": "BOOTSTRAPPED", "rows": len(history), "first_date": history["date"].iloc[0].date().isoformat(), "last_date": history["date"].iloc[-1].date().isoformat(), "object_key": key})
             LOG.info("Onboarded %s (%s): %s rows", ticker, security_id, len(history))
         except Exception as exc:
-            results.append({
-                "security_id": security_id,
-                "ticker": ticker,
-                "provider_symbol": symbol,
-                "status": "UNAVAILABLE",
-                "error": str(exc)[:500],
-            })
+            results.append({"security_id": security_id, "ticker": ticker, "provider_symbol": symbol, "status": "UNAVAILABLE", "error": str(exc)[:500]})
             print(f"::warning title=New-member OHLCV onboarding unavailable::{ticker} ({security_id}): {str(exc)[:300]}")
 
-    summary = {
-        "eligible_members": len(membership),
-        "existing_histories_before": len(existing_ids),
-        "missing_detected": len(missing),
-        "deferred_no_retry": len(deferred),
-        "retryable_missing": len(retryable),
-        "bootstrapped": sum(row["status"] == "BOOTSTRAPPED" for row in results),
-        "unavailable": sum(row["status"] == "UNAVAILABLE" for row in results),
-    }
-    report = {
-        "created_at": datetime.now(UTC).isoformat(),
-        "snapshot_date": snapshot_date,
-        "mode": "NEW_MEMBER_FULL_HISTORY_ONBOARDING",
-        "policy_path": str(args.policy),
-        "max_new_members_guardrail": args.max_new_members,
-        "summary": summary,
-        "results": results,
-    }
+    summary = {"eligible_members": len(membership), "existing_histories_before": len(existing_ids), "missing_detected": len(missing), "deferred_no_retry": len(deferred), "retryable_missing": len(retryable), "bootstrapped": sum(row["status"] == "BOOTSTRAPPED" for row in results), "unavailable": sum(row["status"] == "UNAVAILABLE" for row in results)}
+    report = {"created_at": datetime.now(UTC).isoformat(), "snapshot_date": snapshot_date, "mode": "NEW_MEMBER_FULL_HISTORY_ONBOARDING", "policy_path": str(args.policy), "max_new_members_guardrail": args.max_new_members, "summary": summary, "results": results}
     run_id = os.getenv("GITHUB_RUN_ID", "local")
     attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
-    report_key = f"backtest/manifests/onboarding/{snapshot_date}/run-{run_id}-{attempt}.json"
-    s3.put_object(
-        Bucket=bucket,
-        Key=report_key,
-        Body=json.dumps(report, indent=2).encode(),
-        ContentType="application/json",
-    )
+    report_key = f"history/manifests/onboarding/{snapshot_date}/run-{run_id}-{attempt}.json"
+    s3.put_object(Bucket=bucket, Key=report_key, Body=json.dumps(report, indent=2).encode(), ContentType="application/json")
     print(json.dumps({"report_key": report_key, **summary}, indent=2))
 
 
