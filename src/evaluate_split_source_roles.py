@@ -52,7 +52,7 @@ def main():
     yahoo=yf.download(
         symbols,start="2009-06-01",end="2024-08-01",interval="1d",
         auto_adjust=False,actions=True,repair=False,progress=False,
-        threads=True,group_by="ticker",multi_level_index=True,timeout=30,
+        threads=False,group_by="ticker",multi_level_index=True,timeout=30,
     )
     results={}; failures=[]; tiingo_requests=0
     for ticker,case in CASES.items():
