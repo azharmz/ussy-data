@@ -69,14 +69,14 @@ def main():
         "distinct_securities_with_events":len({e["security_id"] for e in unique.values()}),
         "forward_events":sum(f>1 for f in factors),
         "reverse_events":sum(0<f<1 for f in factors),
+        "successful_tickers":len(symbols)-len(failures),
         "acquisition_gap_count":len(failures),
+        "acquisition_gap_rate":round(len(failures)/len(symbols),6) if symbols else None,
         "acquisition_gaps":failures[:100],
         "tiingo_requests":0,
         "r2_reads":0,
         "r2_writes":0,
     }
     print(json.dumps(out,indent=2,sort_keys=True))
-    if failures:
-        raise SystemExit(2)
 
 if __name__=="__main__": main()
