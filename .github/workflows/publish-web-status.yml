@@ -1,6 +1,12 @@
 name: Publish web status only
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/publish_web_status.py'
+      - 'web/index.html'
+      - '.github/workflows/publish-web-status.yml'
   workflow_dispatch:
     inputs:
       rebuild_compliance:
@@ -43,9 +49,6 @@ jobs:
       - name: Rebuild sharia-only compliance from existing R2 histories
         if: ${{ inputs.rebuild_compliance }}
         run: python src/rebuild_compliance.py
-
-      - name: Export ready-only strategy data
-        run: python src/export_ready.py
 
       - name: Audit recorded earnings freshness for active compliant universe
         run: python src/audit_screening_freshness.py --snapshot-date current
