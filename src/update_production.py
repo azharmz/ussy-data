@@ -9,6 +9,7 @@ import os
 import random
 import time
 from datetime import UTC, datetime, timedelta
+from security_lifecycle import acquisition_allowed
 from itertools import batched
 from typing import Any
 
@@ -76,14 +77,17 @@ def main():
     s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
     if args.snapshot_date=="current":args.snapshot_date=str(read_json(s3,bucket,"universe/current.json")["snapshot_date"])
     membership=read_json(s3,bucket,f"universe/membership/{args.snapshot_date}.json")["records"]; confirmed={str(row["security_id"]):row for row in membership if is_eligible(row)}
-    parquet_ids={key.removeprefix(HISTORY_PREFIX).removesuffix(".parquet") for key in list_keys(s3,bucket,HISTORY_PREFIX) if key.endswith(".parquet")}; operational_ids=sorted(set(confirmed)&parquet_ids); unavailable_ids=sorted(set(confirmed)-parquet_ids)
+    parquet_ids={key.removeprefix(HISTORY_PREFIX).removesuffix(".parquet") for key in list_keys(s3,bucket,HISTORY_PREFIX) if key.endswith(".parquet")}; operational_ids=sorted(set(confirmed)&parquet_ids); unavailable_ids=sorted(set(confirmed)-parquet_ids); acquisition_date=datetime.now(UTC).date()
     rolling_frames=[]; new_rows=[]; details=[]; failures=[]; updated_histories=0; histories={}; candidates=[]
     for security_id in operational_ids:
         record=confirmed[security_id]; ticker=str(record["ticker"]); symbol=yahoo_symbol(ticker,security_id); key=f"{HISTORY_PREFIX}{security_id}.parquet"
         try:
             historical=normalize_existing(read_parquet(s3,bucket,key),security_id,ticker)
             if historical.empty:raise ValueError("Historical Parquet is empty")
-            histories[security_id]=historical; candidates.append((security_id,ticker,symbol,historical["date"].iloc[-1]))
+            histories[security_id]=historical
+            if acquisition_allowed(security_id,acquisition_date): candidates.append((security_id,ticker,symbol,historical["date"].iloc[-1]))
+            else:
+                rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"lifecycle_excluded"}); LOG.info("Lifecycle-excluded daily acquisition for %s (%s)",ticker,security_id)
         except Exception as exc:failures.append({"security_id":security_id,"ticker":ticker,"error":str(exc)[:500]}); LOG.error("Failed to load history for %s (%s): %s",ticker,security_id,exc)
     candidate_batches=list(batched(candidates,args.batch_size))
     for batch_index,batch in enumerate(candidate_batches):
