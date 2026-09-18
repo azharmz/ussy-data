@@ -14,6 +14,27 @@ KEY = ["security_id", "date"]
 VALUE = ["ticker", "open", "high", "low", "close", "adj_close", "volume"]
 
 
+def is_pure_security_set_reduction(canonical, candidate) -> tuple[bool, dict]:
+    """Allow deferral only when candidate removes securities and changes nothing else."""
+    required = set(KEY + VALUE)
+    if not required.issubset(canonical.columns) or not required.issubset(candidate.columns):
+        return False, {"reason": "missing_required_columns"}
+    old = canonical[KEY + VALUE].copy(); new = candidate[KEY + VALUE].copy()
+    old["date"] = pd.to_datetime(old["date"], errors="raise"); new["date"] = pd.to_datetime(new["date"], errors="raise")
+    if old.duplicated(KEY).any() or new.duplicated(KEY).any(): return False, {"reason": "duplicate_keys"}
+    old_sids, new_sids = set(old.security_id.astype(str)), set(new.security_id.astype(str))
+    removed_sids = old_sids - new_sids
+    if not removed_sids or not new_sids.issubset(old_sids): return False, {"reason": "not_security_set_reduction"}
+    retained = old.loc[old.security_id.astype(str).isin(new_sids)].sort_values(KEY).reset_index(drop=True)
+    candidate_sorted = new.sort_values(KEY).reset_index(drop=True)
+    if len(retained) != len(candidate_sorted): return False, {"reason": "retained_row_count_changed"}
+    for col in KEY + VALUE:
+        a, b = retained[col], candidate_sorted[col]
+        equal = a.eq(b) | (a.isna() & b.isna())
+        if not bool(equal.all()): return False, {"reason": "retained_values_changed", "column": col}
+    return True, {"reason": "pure_security_set_reduction", "removed_security_ids": sorted(removed_sids), "removed_security_count": len(removed_sids)}
+
+
 def is_pure_late_arrival_window_advance(canonical, candidate, as_of_date: str) -> tuple[bool, dict]:
     required = set(KEY + VALUE)
     if not required.issubset(canonical.columns) or not required.issubset(candidate.columns):
