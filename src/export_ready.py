@@ -8,7 +8,7 @@ import os
 from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 from ready_snapshot_guard import decide_ready_publication
-from ready_late_arrival_guard import is_pure_late_arrival_window_advance
+from ready_late_arrival_guard import is_pure_late_arrival_window_advance, is_pure_security_set_reduction
 from us_market_finalization import finalized_through
 
 
@@ -154,6 +154,20 @@ def main():
         if safe_late_arrival:
             print(
                 "READY_SAME_DAY_LATE_ARRIVAL_DEFERRED: " + json.dumps(evidence, sort_keys=True),
+                flush=True,
+            )
+            print(
+                f"READY canonical snapshot REUSE: as_of_date={terminal['as_of_date']} "
+                f"canonical_sha256={current_ready['sha256']} candidate_sha256={candidate_sha} "
+                f"key={current_ready['parquet_key']}",
+                flush=True,
+            )
+            return
+        safe_reduction, reduction_evidence = is_pure_security_set_reduction(canonical, frame)
+        if safe_reduction:
+            print(
+                "READY_SAME_DAY_SECURITY_SET_REDUCTION_DEFERRED: "
+                + json.dumps(reduction_evidence, sort_keys=True),
                 flush=True,
             )
             print(
