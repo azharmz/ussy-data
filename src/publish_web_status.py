@@ -308,10 +308,11 @@ def _empty_freshness_summary() -> dict[str, None | bool]:
 # ---------------------------------------------------------------------------
 
 def _determine_pipeline_status(freshness: dict[str, Any], readiness_doc: dict[str, Any]) -> str:
+    """Pipeline health reflects production data health, not screening-evidence confidence."""
     update_failures = readiness_doc.get("update_failures", 0) or 0
     if not isinstance(update_failures, int) or update_failures < 0:
         raise SchemaError("readiness.update_failures must be a non-negative integer when present")
-    if update_failures > 0 or (freshness.get("potentially_stale") or 0) > 0:
+    if update_failures > 0:
         return "DEGRADED"
     return "OPERATIONAL"
 
