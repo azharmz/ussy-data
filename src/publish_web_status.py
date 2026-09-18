@@ -52,6 +52,7 @@ REVIEW_CATEGORIES = {
     "POTENTIALLY_STALE",
     "UNKNOWN",
     "DATA_UNAVAILABLE",
+    "REVIEWED_NO_RETRY",
     "INSUFFICIENT_HISTORY",
     "DAILY_UPDATE_FAILED",
     "LIFECYCLE_EXCLUDED",
@@ -125,6 +126,7 @@ def _extract_universe_counts(readiness_doc: dict[str, Any]) -> dict[str, Any]:
         "included_in_rolling": num("included_in_rolling"),
         "ready": num("ready"),
         "insufficient_history": num("insufficient_history"),
+        "reviewed_no_retry": num("reviewed_no_retry"),
         "data_unavailable": num("data_unavailable"),
         "rolling_rows": num("rolling_rows"),
         "rolling_bars_target": num("rolling_bars_target"),
@@ -228,6 +230,21 @@ def _readiness_review_records(readiness_doc: dict[str, Any],
             "screening_updated_at": None,
             "recorded_earnings_date": None,
             "last_market_date": sec.get("last_date"),
+        })
+
+    reviewed_no_retry_ids = readiness_doc.get("reviewed_no_retry_security_ids", [])
+    if not isinstance(reviewed_no_retry_ids, list):
+        raise SchemaError("readiness.reviewed_no_retry_security_ids must be an array")
+    for sec_id in reviewed_no_retry_ids:
+        sec_id = str(sec_id)
+        out.append({
+            "security_id": sec_id,
+            "ticker": ticker_by_id.get(sec_id),
+            "category": "REVIEWED_NO_RETRY",
+            "reason": "Reviewed lifecycle/identity disposition; canonical bootstrap intentionally not retried",
+            "screening_updated_at": None,
+            "recorded_earnings_date": None,
+            "last_market_date": None,
         })
 
     data_unavailable_ids = readiness_doc.get("data_unavailable_security_ids")
@@ -390,7 +407,7 @@ def build_error_document(message: str) -> dict[str, Any]:
         "universe": {
             "confirmed_compliant": None, "included_in_rolling": None,
             "ready": None, "insufficient_history": None,
-            "data_unavailable": None, "rolling_rows": None,
+            "reviewed_no_retry": None, "data_unavailable": None, "rolling_rows": None,
             "rolling_bars_target": None, "minimum_ready_bars": None,
         },
         "changes": {
@@ -428,6 +445,7 @@ def _print_summary(doc: dict[str, Any]) -> None:
     u = doc["universe"]
     print(f"  confirmed_compliant={u.get('confirmed_compliant')} "
           f"ready={u.get('ready')} "
+          f"reviewed_no_retry={u.get('reviewed_no_retry')} "
           f"data_unavailable={u.get('data_unavailable')}")
     print(f"  review_queue entries: {len(doc.get('review_queue', []))}")
     if doc.get("warning"):
