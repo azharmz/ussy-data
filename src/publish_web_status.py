@@ -54,6 +54,7 @@ REVIEW_CATEGORIES = {
     "DATA_UNAVAILABLE",
     "INSUFFICIENT_HISTORY",
     "DAILY_UPDATE_FAILED",
+    "LIFECYCLE_EXCLUDED",
 }
 
 
@@ -245,6 +246,16 @@ def _readiness_review_records(readiness_doc: dict[str, Any],
         })
 
     for sec in securities:
+        if str(sec.get("update_status", "")) == "lifecycle_excluded":
+            out.append({
+                "security_id": sec.get("security_id"),
+                "ticker": sec.get("ticker"),
+                "category": "LIFECYCLE_EXCLUDED",
+                "reason": "Verified lifecycle/tradability state; primary daily acquisition intentionally skipped",
+                "screening_updated_at": None,
+                "recorded_earnings_date": None,
+                "last_market_date": sec.get("last_date"),
+            })
         if str(sec.get("update_status", "")) == "stale_after_failure":
             out.append({
                 "security_id": sec.get("security_id"),
