@@ -1,0 +1,42 @@
+name: QQQ benchmark history
+on:
+  workflow_dispatch:
+  schedule:
+    # 04:00 UTC Tue-Sat: after production OHLCV/SPY and before FWD1.
+    - cron: '0 4 * * 2-6'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/benchmark-qqq.yml'
+      - 'src/update_qqq.py'
+      - 'tests/test_qqq.py'
+permissions:
+  contents: read
+concurrency:
+  group: benchmark-qqq
+  cancel-in-progress: false
+jobs:
+  qqq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - run: python -m unittest discover -s tests
+      - name: Check existing QQQ then bootstrap or update
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: python src/update_qqq.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qqq-benchmark-${{ github.run_id }}
+          path: diagnostics/qqq/
+          retention-days: 30
