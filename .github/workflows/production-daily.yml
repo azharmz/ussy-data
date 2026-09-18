@@ -34,6 +34,7 @@ on:
       - 'src/publish_web_status.py'
       - 'web/index.html'
       - 'src/export_ready.py'
+      - 'src/ready_late_arrival_guard.py'
       - 'src/load_ready.py'
       - 'tests/test_load_ready.py'
       - 'tests/test_ready_finalization.py'
