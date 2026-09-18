@@ -1,0 +1,42 @@
+name: SPY benchmark history
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:45 UTC Tue-Sat: after upstream production OHLCV refresh and before FWD1.
+    - cron: '45 3 * * 2-6'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/benchmark-spy.yml'
+      - 'src/update_spy.py'
+      - 'tests/test_spy.py'
+permissions:
+  contents: read
+concurrency:
+  group: benchmark-spy
+  cancel-in-progress: false
+jobs:
+  spy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - run: python -m unittest discover -s tests
+      - name: Check existing SPY then bootstrap or update
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: python src/update_spy.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: spy-benchmark-${{ github.run_id }}
+          path: diagnostics/spy/
+          retention-days: 30
