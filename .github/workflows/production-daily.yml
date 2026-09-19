@@ -42,13 +42,6 @@ jobs:
     outputs:
       complete: ${{ steps.guard.outputs.complete }}
       stage: ${{ steps.guard.outputs.stage }}
-      completion_key: ${{ steps.guard.outputs.completion_key }}
-      completion_sha256: ${{ steps.guard.outputs.completion_sha256 }}
-      ready_as_of_date: ${{ steps.guard.outputs.ready_as_of_date }}
-      ready_parquet_key: ${{ steps.guard.outputs.ready_parquet_key }}
-      ready_sha256: ${{ steps.guard.outputs.ready_sha256 }}
-      ema_parquet_key: ${{ steps.guard.outputs.ema_parquet_key }}
-      ema_sha256: ${{ steps.guard.outputs.ema_sha256 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -153,7 +146,7 @@ jobs:
 
   dispatch-trendfoll:
     needs: [completion, downstream]
-    if: always() && ((needs.downstream.result == 'success') || needs.completion.outputs.complete == 'true')
+    if: always() && needs.downstream.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
