@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'src/publish_web_status.py'
-      - 'web/index.html'
       - '.github/workflows/publish-web-status.yml'
   workflow_dispatch:
     inputs:

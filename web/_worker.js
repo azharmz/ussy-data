@@ -95,7 +95,7 @@ async function syncUniverseIfNeeded(env) {
     String(r.security_id),
     String(r.ticker).toUpperCase(),
     r.name == null ? null : String(r.name),
-    String(r.sharia_compliance || r.musaffaHalalRating || "UNKNOWN").toUpperCase(),
+    String(r.sharia_compliance || "UNKNOWN").toUpperCase(),
     date,
     now
   ));
@@ -303,6 +303,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+    if (url.pathname === "/api/universe-status") {
+      try { return json(await getR2Json(env.R2_BUCKET, "web/status.json")); }
+      catch (error) { return json({ error: "Universe status unavailable", detail: String(error?.message || error) }, 503); }
+    }
     if (url.pathname === "/api/stocks") return stockExplorer(url, env);
     if (url.pathname === "/api/serving-status") return servingStatus(env);
     if (url.pathname === "/api/r2-usage") return r2Usage(env);
