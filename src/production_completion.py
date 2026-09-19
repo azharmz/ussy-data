@@ -58,11 +58,27 @@ def marker_matches(marker,identity):
     if marker.get("downstream_version")!=DOWNSTREAM_VERSION:return False
     return all(marker.get(k)==v for k,v in identity.items())
 
+def recovery_stage(s3,bucket):
+    """Return the earliest trustworthy stage that still needs work."""
+    target=intended_finalized_identity()
+    try: ready=read_json(s3,bucket,"production/ready/current.json")
+    except Exception:return "ohlcv",None
+    if ready.get("as_of_date")!=target:return "ohlcv",None
+    try: ema=read_json(s3,bucket,"production/indicators/ema/current.json")
+    except Exception:return "ema",None
+    identity={
+      "finalized_through":target,"ready_as_of_date":ready.get("as_of_date"),
+      "ready_parquet_key":ready.get("parquet_key"),"ready_sha256":ready.get("sha256"),
+      "ema_parquet_key":ema.get("parquet_key"),"ema_sha256":ema.get("sha256"),
+      "ema_source_ready_parquet_key":ema.get("source_ready_parquet_key"),
+      "ema_source_ready_sha256":ema.get("source_ready_sha256")}
+    if not lineage_valid(identity):return "ema",identity
+    if marker_matches(optional_json(s3,bucket,POINTER_KEY),identity):return "complete",identity
+    return "downstream",identity
+
 def is_complete(s3,bucket):
-    try: identity=current_identity(s3,bucket)
-    except Exception:return False,None
-    if identity["ready_as_of_date"]!=identity["finalized_through"] or not lineage_valid(identity):return False,identity
-    return marker_matches(optional_json(s3,bucket,POINTER_KEY),identity),identity
+    stage,identity=recovery_stage(s3,bucket)
+    return stage=="complete",identity
 
 def write_completion(s3,bucket):
     identity=current_identity(s3,bucket)
@@ -87,7 +103,10 @@ def main():
     if a.check==a.write:raise ValueError("Choose exactly one of --check or --write")
     s3,bucket=make_s3_client(),os.environ["R2_BUCKET_NAME"]
     if a.check:
-        complete,identity=is_complete(s3,bucket);print(json.dumps({"complete":complete,"identity":identity},indent=2))
-        if os.getenv("GITHUB_OUTPUT"):open(os.environ["GITHUB_OUTPUT"],"a").write(f"complete={'true' if complete else 'false'}\n")
+        stage,identity=recovery_stage(s3,bucket);complete=stage=="complete";print(json.dumps({"complete":complete,"stage":stage,"identity":identity},indent=2))
+        if os.getenv("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+                out.write(f"complete={'true' if complete else 'false'}\n")
+                out.write(f"stage={stage}\n")
     else:print(json.dumps(write_completion(s3,bucket),indent=2))
 if __name__=="__main__":main()
