@@ -117,7 +117,7 @@ jobs:
 
   ready:
     needs: [completion, preflight, ohlcv]
-    if: always() && needs.preflight.result == 'success' && (needs.completion.outputs.stage == 'ohlcv' && needs.ohlcv.result == 'success')
+    if: always() && needs.preflight.result == 'success' && needs.completion.outputs.stage == 'ohlcv' && needs.ohlcv.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
