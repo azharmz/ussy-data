@@ -1,7 +1,9 @@
 import sys, unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
-from production_completion import marker_matches, lineage_valid, DOWNSTREAM_VERSION
+from production_completion import marker_matches, lineage_valid, intended_finalized_identity, DOWNSTREAM_VERSION
+import production_completion
+from datetime import date
 
 class CompletionTests(unittest.TestCase):
  def identity(self):
@@ -14,6 +16,12 @@ class CompletionTests(unittest.TestCase):
   i=self.identity();i["ema_source_ready_sha256"]="old";self.assertFalse(lineage_valid(i))
  def test_downstream_incomplete_not_complete(self):
   i=self.identity();m={"schema_version":1,"status":"FULLY_COMPLETE","downstream_version":"old",**i};self.assertFalse(marker_matches(m,i))
+ def test_weekend_maps_to_friday(self):
+  old=production_completion.finalized_through
+  try:
+   production_completion.finalized_through=lambda:date(2026,9,19)
+   self.assertEqual(intended_finalized_identity(),"2026-09-18")
+  finally:production_completion.finalized_through=old
  def test_lineage_mismatch_not_complete(self):
   i=self.identity();m={"schema_version":1,"status":"FULLY_COMPLETE","downstream_version":DOWNSTREAM_VERSION,**i};m["ready_sha256"]="other";self.assertFalse(marker_matches(m,i))
 if __name__=="__main__":unittest.main()
