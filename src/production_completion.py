@@ -20,11 +20,24 @@ def optional_json(s3,bucket,key):
         if code in {"NoSuchKey","404","NotFound"} or isinstance(exc,KeyError):return None
         raise
 
+def intended_finalized_identity():
+    """Latest likely US trading date at/before the conservative finalization cutoff.
+
+    Weekend dates are mapped to Friday. Exchange holidays remain safely non-complete:
+    READY will not equal the holiday date, so production may run and reuse durable
+    checkpoints rather than incorrectly suppressing recovery.
+    """
+    cutoff=finalized_through()
+    while cutoff.weekday()>=5:
+        from datetime import timedelta
+        cutoff-=timedelta(days=1)
+    return cutoff.isoformat()
+
 def current_identity(s3,bucket):
     ready=read_json(s3,bucket,"production/ready/current.json")
     ema=read_json(s3,bucket,"production/indicators/ema/current.json")
     return {
-      "finalized_through": finalized_through().isoformat(),
+      "finalized_through": intended_finalized_identity(),
       "ready_as_of_date": ready.get("as_of_date"),
       "ready_parquet_key": ready.get("parquet_key"),
       "ready_sha256": ready.get("sha256"),
