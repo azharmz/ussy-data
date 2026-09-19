@@ -28,8 +28,6 @@ on:
       - 'src/guard_us_market_finalization.py'
       - 'src/us_market_finalization.py'
       - 'src/run_production_finalized.py'
-      - 'src/production_completion.py'
-      - 'tests/test_production_completion.py'
       - 'src/update_production.py'
       - 'src/security_lifecycle.py'
       - 'config/security-lifecycle.json'
