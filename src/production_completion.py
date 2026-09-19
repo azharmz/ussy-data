@@ -99,8 +99,8 @@ def write_completion(s3,bucket):
     return pointer
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument("--check",action="store_true");p.add_argument("--write",action="store_true");a=p.parse_args()
-    if a.check==a.write:raise ValueError("Choose exactly one of --check or --write")
+    p=argparse.ArgumentParser();p.add_argument("--check",action="store_true");p.add_argument("--write",action="store_true");p.add_argument("--dispatch-identity",action="store_true");a=p.parse_args()
+    if sum([a.check,a.write,a.dispatch_identity])!=1:raise ValueError("Choose exactly one of --check, --write, or --dispatch-identity")
     s3,bucket=make_s3_client(),os.environ["R2_BUCKET_NAME"]
     if a.check:
         stage,identity=recovery_stage(s3,bucket);complete=stage=="complete";print(json.dumps({"complete":complete,"stage":stage,"identity":identity},indent=2))
@@ -108,5 +108,22 @@ def main():
             with open(os.environ["GITHUB_OUTPUT"],"a") as out:
                 out.write(f"complete={'true' if complete else 'false'}\n")
                 out.write(f"stage={stage}\n")
-    else:print(json.dumps(write_completion(s3,bucket),indent=2))
+    elif a.write:print(json.dumps(write_completion(s3,bucket),indent=2))
+    else:
+        marker=optional_json(s3,bucket,POINTER_KEY)
+        complete,identity=is_complete(s3,bucket)
+        if not complete or not marker or not identity:
+            raise RuntimeError("Cannot dispatch: current production identity is not durably complete")
+        if not marker_matches(marker,identity):
+            raise RuntimeError("Cannot dispatch: completion marker does not match current READY/EMA identity")
+        required={
+          "completion_key":marker.get("completion_key"),"completion_sha256":marker.get("completion_sha256"),
+          "ready_as_of_date":identity["ready_as_of_date"],"ready_parquet_key":identity["ready_parquet_key"],
+          "ready_sha256":identity["ready_sha256"],"ema_parquet_key":identity["ema_parquet_key"],
+          "ema_sha256":identity["ema_sha256"]}
+        if not all(required.values()):raise RuntimeError("Cannot dispatch: durable completion identity is incomplete")
+        print(json.dumps(required,indent=2))
+        if os.getenv("GITHUB_OUTPUT"):
+            with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+                for k,v in required.items():out.write(f"{k}={v}\n")
 if __name__=="__main__":main()
