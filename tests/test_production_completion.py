@@ -1,7 +1,7 @@
 import sys, unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
-from production_completion import marker_matches, lineage_valid, intended_finalized_identity, DOWNSTREAM_VERSION
+from production_completion import marker_matches, lineage_valid, intended_finalized_identity, recovery_stage, DOWNSTREAM_VERSION
 import production_completion
 from datetime import date
 
@@ -22,6 +22,21 @@ class CompletionTests(unittest.TestCase):
    production_completion.finalized_through=lambda:date(2026,9,19)
    self.assertEqual(intended_finalized_identity(),"2026-09-18")
   finally:production_completion.finalized_through=old
+ def test_recovery_stage_ready_without_ema_resumes_ema(self):
+  i=self.identity()
+  class S:
+   def get_object(self,**kw):
+    import io,json
+    key=kw["Key"]
+    if key=="production/ready/current.json":
+     body={"as_of_date":"2026-09-18","parquet_key":i["ready_parquet_key"],"sha256":"r"}
+     return {"Body":io.BytesIO(json.dumps(body).encode())}
+    raise KeyError(key)
+  old=production_completion.intended_finalized_identity
+  try:
+   production_completion.intended_finalized_identity=lambda:"2026-09-18"
+   self.assertEqual(recovery_stage(S(),"b")[0],"ema")
+  finally:production_completion.intended_finalized_identity=old
  def test_lineage_mismatch_not_complete(self):
   i=self.identity();m={"schema_version":1,"status":"FULLY_COMPLETE","downstream_version":DOWNSTREAM_VERSION,**i};m["ready_sha256"]="other";self.assertFalse(marker_matches(m,i))
 if __name__=="__main__":unittest.main()
