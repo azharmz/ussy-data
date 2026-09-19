@@ -18,30 +18,6 @@ on:
   schedule:
     # 05:07 UTC = 13:07 WITA. Well after the prior regular US close + 90m buffer.
     - cron: "7 5 * * 1-5"
-  push:
-    branches: [main]
-    paths:
-      - 'src/bootstrap_missing_ohlcv.py'
-      - 'tests/test_bootstrap_missing_ohlcv.py'
-      - 'src/provider_symbols.py'
-      - 'tests/test_provider_symbols.py'
-      - 'src/guard_us_market_finalization.py'
-      - 'src/us_market_finalization.py'
-      - 'src/run_production_finalized.py'
-      - 'src/production_completion.py'
-      - 'tests/test_production_completion.py'
-      - 'src/update_production.py'
-      - 'src/security_lifecycle.py'
-      - 'config/security-lifecycle.json'
-      - 'tests/test_security_lifecycle.py'
-      - 'src/export_ready.py'
-      - 'src/ready_late_arrival_guard.py'
-      - 'src/load_ready.py'
-      - 'tests/test_load_ready.py'
-      - 'tests/test_ready_finalization.py'
-      - 'src/r2_storage_guard.py'
-      - 'tests/test_r2_storage_guard.py'
-      - '.github/workflows/production-daily.yml'
 
 permissions:
   contents: read
