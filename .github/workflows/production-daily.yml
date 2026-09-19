@@ -28,6 +28,8 @@ on:
       - 'src/guard_us_market_finalization.py'
       - 'src/us_market_finalization.py'
       - 'src/run_production_finalized.py'
+      - 'src/production_completion.py'
+      - 'tests/test_production_completion.py'
       - 'src/update_production.py'
       - 'src/security_lifecycle.py'
       - 'config/security-lifecycle.json'
@@ -58,7 +60,25 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
+  completion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      complete: ${{ steps.guard.outputs.complete }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - id: guard
+        name: Check durable full-production completion
+        run: python src/production_completion.py --check
+
   preflight:
+    needs: completion
+    if: needs.completion.outputs.complete != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -140,3 +160,5 @@ jobs:
         run: python src/audit_screening_freshness.py --snapshot-date current
       - name: Publish read-only web status
         run: python src/publish_web_status.py
+      - name: Write durable full-production completion evidence
+        run: python src/production_completion.py --write
