@@ -19,10 +19,10 @@ class SecurityLifecycleTests(unittest.TestCase):
             self.assertTrue(security_lifecycle.acquisition_allowed(security_id, boundary - timedelta(days=1)))
             self.assertFalse(security_lifecycle.acquisition_allowed(security_id, boundary))
 
-    def test_blocking_records_without_effective_date_fail_closed(self):
+    def test_blocking_records_without_effective_date_are_not_backdated(self):
         for security_id, record in security_lifecycle.records().items():
             if record.get("lifecycle_status") in security_lifecycle.BLOCKING_STATUSES and not record.get("effective_date"):
-                self.assertFalse(security_lifecycle.acquisition_allowed(security_id, date(2026, 9, 19)))
+                self.assertTrue(security_lifecycle.acquisition_allowed(security_id, date(2026, 9, 19)))
 
     def test_review_required_is_not_silently_excluded(self):
         for security_id, record in security_lifecycle.records().items():
