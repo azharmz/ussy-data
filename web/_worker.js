@@ -127,10 +127,91 @@ async function syncUniverseIfNeeded(env) {
   return { changed: true, snapshot_date: date, row_count: records.length, source_key: sourceKey };
 }
 
+async function syncFundamentalsIfNeeded(env) {
+  await ensureRefreshTable(env.DB);
+  const pointer = await getR2Json(env.R2_BUCKET, "fundamentals/current.json");
+  if (pointer.status !== "READY") throw new Error("fundamentals/current.json is not READY");
+  const sourceKey = pointer.serving_current_key;
+  if (!sourceKey) throw new Error("fundamentals/current.json has no serving_current_key");
+
+  const state = await env.DB.prepare(
+    "SELECT source_key, status FROM serving_refresh_state WHERE dataset = ?"
+  ).bind("fundamentals").first();
+  if (state?.source_key === sourceKey && state?.status === "READY") {
+    return { changed: false, source_key: sourceKey };
+  }
+
+  const payload = await getR2Json(env.R2_BUCKET, sourceKey);
+  if (!Array.isArray(payload.records)) throw new Error(sourceKey + " does not contain records[]");
+  if (Number(payload.row_count) !== payload.records.length) {
+    throw new Error("Fundamentals projection row_count mismatch");
+  }
+
+  const universeState = await env.DB.prepare(
+    "SELECT source_as_of, status FROM serving_refresh_state WHERE dataset='universe'"
+  ).first();
+  if (universeState?.status !== "READY") throw new Error("Universe serving state is not READY");
+  if (payload.universe_snapshot_date &&
+      String(payload.universe_snapshot_date) !== String(universeState.source_as_of)) {
+    throw new Error("Fundamentals and Universe snapshot dates disagree");
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO serving_refresh_state(dataset, source_key, source_as_of, row_count, refreshed_at, status)
+     VALUES (?, ?, ?, ?, ?, 'SYNCING')
+     ON CONFLICT(dataset) DO UPDATE SET source_key=excluded.source_key,
+       source_as_of=excluded.source_as_of, row_count=excluded.row_count,
+       refreshed_at=excluded.refreshed_at, status='SYNCING'`
+  ).bind("fundamentals", sourceKey, pointer.snapshot_date || null, payload.records.length, now).run();
+
+  const statements = payload.records.map(r => env.DB.prepare(
+    `INSERT INTO fundamentals_current(
+       security_id,ticker,status,as_of_date,accepted_at,fiscal_period_end,
+       eps_yoy_latest,eps_yoy_prior,revenue_yoy_latest,revenue_yoy_prior,
+       annual_eps_growth,source_key,updated_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(security_id) DO UPDATE SET
+       ticker=excluded.ticker,status=excluded.status,as_of_date=excluded.as_of_date,
+       accepted_at=excluded.accepted_at,fiscal_period_end=excluded.fiscal_period_end,
+       eps_yoy_latest=excluded.eps_yoy_latest,eps_yoy_prior=excluded.eps_yoy_prior,
+       revenue_yoy_latest=excluded.revenue_yoy_latest,revenue_yoy_prior=excluded.revenue_yoy_prior,
+       annual_eps_growth=excluded.annual_eps_growth,source_key=excluded.source_key,
+       updated_at=excluded.updated_at`
+  ).bind(
+    String(r.security_id), String(r.ticker).toUpperCase(), r.status ?? null,
+    r.as_of_date ?? null, r.accepted_at ?? null, r.fiscal_period_end ?? null,
+    r.eps_yoy_latest ?? null, r.eps_yoy_prior ?? null,
+    r.revenue_yoy_latest ?? null, r.revenue_yoy_prior ?? null,
+    r.annual_eps_growth ?? null, sourceKey, now
+  ));
+
+  for (let i = 0; i < statements.length; i += 100) {
+    await env.DB.batch(statements.slice(i, i + 100));
+  }
+  await env.DB.prepare("DELETE FROM fundamentals_current WHERE source_key <> ?").bind(sourceKey).run();
+
+  const count = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM fundamentals_current WHERE source_key = ?"
+  ).bind(sourceKey).first();
+  if (Number(count?.n || 0) !== payload.records.length) {
+    await env.DB.prepare(
+      "UPDATE serving_refresh_state SET status='FAILED', refreshed_at=? WHERE dataset='fundamentals'"
+    ).bind(new Date().toISOString()).run();
+    throw new Error(`Fundamentals row-count verification failed: expected ${payload.records.length}, got ${count?.n || 0}`);
+  }
+
+  await env.DB.prepare(
+    "UPDATE serving_refresh_state SET row_count=?, refreshed_at=?, status='READY' WHERE dataset='fundamentals'"
+  ).bind(payload.records.length, new Date().toISOString()).run();
+  return { changed: true, source_key: sourceKey, row_count: payload.records.length };
+}
+
 async function stockExplorer(url, env) {
   if (!env.DB) return json({ error: "DB binding is not configured" }, 503);
   try {
     await syncUniverseIfNeeded(env);
+    await syncFundamentalsIfNeeded(env);
   } catch (error) {
     return json({ error: "Universe serving sync failed", detail: String(error?.message || error) }, 503);
   }
@@ -172,11 +253,18 @@ async function stockExplorer(url, env) {
 async function servingStatus(env) {
   if (!env.DB) return json({ error: "DB binding is not configured" }, 503);
   try {
-    const sync = await syncUniverseIfNeeded(env);
-    const state = await env.DB.prepare(
-      "SELECT * FROM serving_refresh_state WHERE dataset='universe'"
-    ).first();
-    return json({ ok: true, universe: state, sync });
+    const universeSync = await syncUniverseIfNeeded(env);
+    const fundamentalsSync = await syncFundamentalsIfNeeded(env);
+    const states = await env.DB.prepare(
+      "SELECT * FROM serving_refresh_state WHERE dataset IN ('universe','fundamentals') ORDER BY dataset"
+    ).all();
+    const byDataset = Object.fromEntries((states.results || []).map(x => [x.dataset, x]));
+    return json({
+      ok: true,
+      universe: byDataset.universe || null,
+      fundamentals: byDataset.fundamentals || null,
+      sync: { universe: universeSync, fundamentals: fundamentalsSync }
+    });
   } catch (error) {
     return json({ ok: false, error: String(error?.message || error) }, 503);
   }
