@@ -1,56 +1,16 @@
-name: Publish web status only
+name: Legacy web status publisher (retired)
 
+# Retired: dashboard serving state is rebuilt into D1 by web/_worker.js
+# from authoritative R2 universe/readiness/freshness sources.
+# Kept temporarily as historical reference; no production trigger.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/publish_web_status.py'
-      - '.github/workflows/publish-web-status.yml'
   workflow_dispatch:
-    inputs:
-      rebuild_compliance:
-        description: 'Rebuild compliance/readiness from existing R2 history (NO Yahoo download)'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: publish-web-status-only
-  cancel-in-progress: false
-
 jobs:
-  publish:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    env:
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-      PYTHONUNBUFFERED: "1"
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
-
-      - name: Rebuild sharia-only compliance from existing R2 histories
-        if: ${{ inputs.rebuild_compliance }}
-        run: python src/rebuild_compliance.py
-
-      - name: Audit recorded earnings freshness for active compliant universe
-        run: python src/audit_screening_freshness.py --snapshot-date current
-
-      - name: Publish web status
-        run: python src/publish_web_status.py
+      - run: echo "Retired. USSY Data Control is served through D1; web/status.json is no longer a production dependency."
