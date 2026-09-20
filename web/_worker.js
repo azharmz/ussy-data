@@ -269,6 +269,8 @@ async function syncDashboardIfNeeded(env) {
         recorded_earnings_date:r.recorded_earnings_date||null,last_market_date:sec.last_date||null});
     }
   }
+  // Review categories are source-native production states, not the retired web/status.json taxonomy.
+  // Freshness uses freshness_status verbatim; readiness list names/update_status define readiness categories.
   const addIds=(ids,category,reasonFn)=>{
     for(const raw of (Array.isArray(ids)?ids:[])){const id=String(raw),sec=secById.get(id)||{};
       queue.push({security_id:id,ticker:sec.ticker||tickerById.get(id),category,
@@ -277,11 +279,11 @@ async function syncDashboardIfNeeded(env) {
   };
   addIds(readiness.insufficient_history_security_ids,"INSUFFICIENT_HISTORY",sec =>
     `${sec.rolling_bars??"?"} of ${readiness.minimum_ready_bars} minimum bars (${readiness.rolling_bars_target} target)`);
-  addIds(readiness.reviewed_no_retry_security_ids,"REVIEWED_NO_RETRY","Reviewed lifecycle/identity disposition; canonical bootstrap intentionally not retried");
-  addIds(readiness.data_unavailable_security_ids,"DATA_UNAVAILABLE","No historical OHLCV data available");
+  addIds(readiness.reviewed_no_retry_security_ids,"REVIEWED_NO_RETRY",null);
+  addIds(readiness.data_unavailable_security_ids,"DATA_UNAVAILABLE",null);
   for(const sec of secs){const st=String(sec.update_status||"");
-    if(st==="lifecycle_excluded") queue.push({security_id:String(sec.security_id),ticker:sec.ticker,category:"LIFECYCLE_EXCLUDED",reason:"Verified lifecycle/tradability state; primary daily acquisition intentionally skipped",screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});
-    if(st==="stale_after_failure") queue.push({security_id:String(sec.security_id),ticker:sec.ticker,category:"DAILY_UPDATE_FAILED",reason:"Daily update failed; data held at last known state",screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});
+    if(st==="lifecycle_excluded") queue.push({security_id:String(sec.security_id),ticker:sec.ticker,category:"LIFECYCLE_EXCLUDED",reason:sec.error||null,screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});
+    if(st==="stale_after_failure") queue.push({security_id:String(sec.security_id),ticker:sec.ticker,category:"STALE_AFTER_FAILURE",reason:sec.error||null,screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});
   }
   const universe={
     confirmed_compliant:readiness.confirmed_compliant,included_in_rolling:readiness.included_in_rolling,
