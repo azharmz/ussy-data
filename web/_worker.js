@@ -228,8 +228,8 @@ async function syncDashboardIfNeeded(env) {
   await ensureDashboardTables(env.DB);
   const current = await getR2Json(env.R2_BUCKET, "universe/current.json");
   const date = snapshotDate(current);
-  const membershipKey = `universe/membership/\${date}.json`;
-  const changesKey = `universe/changes/\${date}.json`;
+  const membershipKey = `universe/membership/${date}.json`;
+  const changesKey = `universe/changes/${date}.json`;
   const readinessKey = "production/rolling/readiness.json";
   const freshnessKey = "universe/freshness/latest.json";
   const heads = await Promise.all([
@@ -276,7 +276,7 @@ async function syncDashboardIfNeeded(env) {
         screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});}
   };
   addIds(readiness.insufficient_history_security_ids,"INSUFFICIENT_HISTORY",sec =>
-    `\${sec.rolling_bars??"?"} of \${readiness.minimum_ready_bars} minimum bars (\${readiness.rolling_bars_target} target)`);
+    `${sec.rolling_bars??"?"} of ${readiness.minimum_ready_bars} minimum bars (${readiness.rolling_bars_target} target)`);
   addIds(readiness.reviewed_no_retry_security_ids,"REVIEWED_NO_RETRY","Reviewed lifecycle/identity disposition; canonical bootstrap intentionally not retried");
   addIds(readiness.data_unavailable_security_ids,"DATA_UNAVAILABLE","No historical OHLCV data available");
   for(const sec of secs){const st=String(sec.update_status||"");
