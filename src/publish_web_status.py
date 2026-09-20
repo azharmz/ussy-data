@@ -176,7 +176,7 @@ def _extract_freshness_summary(freshness_doc: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _freshness_review_records(freshness_doc: dict[str, Any]) -> list[dict[str, Any]]:
+def _freshness_review_records(freshness_doc: dict[str, Any],\n                              last_date_by_id: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     records = freshness_doc.get("records", [])
     if not isinstance(records, list):
         raise SchemaError("freshness.records must be an array")
