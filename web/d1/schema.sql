@@ -46,3 +46,29 @@ SELECT
   f.annual_eps_growth
 FROM securities s
 LEFT JOIN fundamentals_current f ON f.security_id = s.security_id;
+
+
+-- Dashboard serving projection. R2 remains authoritative; these tables are rebuildable.
+CREATE TABLE IF NOT EXISTS dashboard_status (
+  id INTEGER PRIMARY KEY CHECK (id=1),
+  snapshot_date TEXT NOT NULL,
+  pipeline_status TEXT NOT NULL,
+  generated_at TEXT NOT NULL,
+  universe_json TEXT NOT NULL,
+  changes_json TEXT NOT NULL,
+  freshness_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dashboard_review_queue (
+  security_id TEXT NOT NULL,
+  ticker TEXT,
+  category TEXT NOT NULL,
+  reason TEXT,
+  screening_updated_at TEXT,
+  recorded_earnings_date TEXT,
+  last_market_date TEXT,
+  PRIMARY KEY (security_id, category)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_review_ticker ON dashboard_review_queue(ticker);
+CREATE INDEX IF NOT EXISTS idx_dashboard_review_category ON dashboard_review_queue(category);
