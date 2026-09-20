@@ -1,0 +1,43 @@
+name: Research probe — BK Twelve Data raw OHLCV
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-bk-twelve-data.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Fetch BK historical raw OHLCV from Twelve Data
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          key=os.environ.get("TWELVE_DATA_API_KEY")
+          if not key:
+              raise SystemExit("TWELVE_DATA_API_KEY missing")
+          params=urllib.parse.urlencode({
+              "symbol":"BK","interval":"1day",
+              "start_date":"2024-12-01","end_date":"2025-11-11",
+              "adjust":"none","outputsize":5000,"apikey":key})
+          req=urllib.request.Request("https://api.twelvedata.com/time_series?"+params,
+                                     headers={"User-Agent":"ussy-data-research-probe/1"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              p=json.loads(r.read())
+          if p.get("status")=="error" or "values" not in p:
+              raise SystemExit("Twelve Data error code="+str(p.get("code"))+" message="+str(p.get("message",""))[:200])
+          vals=sorted(p["values"],key=lambda x:x["datetime"])
+          print("BK_TD_META="+json.dumps({k:p.get("meta",{}).get(k) for k in ("symbol","interval","currency","exchange","mic_code","type","exchange_timezone")},separators=(",",":")))
+          print("BK_TD_SUMMARY="+json.dumps({"rows":len(vals),"first":vals[0]["datetime"] if vals else None,"last":vals[-1]["datetime"] if vals else None,"adjust":"none","price_basis":"RAW"},separators=(",",":")))
+          for row in vals:
+              print("BK_TD_ROW="+json.dumps({k:row.get(k) for k in ("datetime","open","high","low","close","volume")},separators=(",",":")))
+          PY
