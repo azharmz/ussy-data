@@ -210,16 +210,16 @@ async function syncFundamentalsIfNeeded(env) {
 
 async function ensureDashboardTables(db) {
   await db.batch([
-    db.prepare(\`CREATE TABLE IF NOT EXISTS dashboard_status (
+    db.prepare(`CREATE TABLE IF NOT EXISTS dashboard_status (
       id INTEGER PRIMARY KEY CHECK (id=1), snapshot_date TEXT NOT NULL,
       pipeline_status TEXT NOT NULL, generated_at TEXT NOT NULL,
       universe_json TEXT NOT NULL, changes_json TEXT NOT NULL, freshness_json TEXT NOT NULL
-    )\`),
-    db.prepare(\`CREATE TABLE IF NOT EXISTS dashboard_review_queue (
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS dashboard_review_queue (
       security_id TEXT NOT NULL, ticker TEXT, category TEXT NOT NULL, reason TEXT,
       screening_updated_at TEXT, recorded_earnings_date TEXT, last_market_date TEXT,
       PRIMARY KEY (security_id, category)
-    )\`)
+    )`)
   ]);
 }
 
@@ -228,8 +228,8 @@ async function syncDashboardIfNeeded(env) {
   await ensureDashboardTables(env.DB);
   const current = await getR2Json(env.R2_BUCKET, "universe/current.json");
   const date = snapshotDate(current);
-  const membershipKey = \`universe/membership/\${date}.json\`;
-  const changesKey = \`universe/changes/\${date}.json\`;
+  const membershipKey = `universe/membership/\${date}.json`;
+  const changesKey = `universe/changes/\${date}.json`;
   const readinessKey = "production/rolling/readiness.json";
   const freshnessKey = "universe/freshness/latest.json";
   const heads = await Promise.all([
@@ -276,7 +276,7 @@ async function syncDashboardIfNeeded(env) {
         screening_updated_at:null,recorded_earnings_date:null,last_market_date:sec.last_date||null});}
   };
   addIds(readiness.insufficient_history_security_ids,"INSUFFICIENT_HISTORY",sec =>
-    \`\${sec.rolling_bars??"?"} of \${readiness.minimum_ready_bars} minimum bars (\${readiness.rolling_bars_target} target)\`);
+    `\${sec.rolling_bars??"?"} of \${readiness.minimum_ready_bars} minimum bars (\${readiness.rolling_bars_target} target)`);
   addIds(readiness.reviewed_no_retry_security_ids,"REVIEWED_NO_RETRY","Reviewed lifecycle/identity disposition; canonical bootstrap intentionally not retried");
   addIds(readiness.data_unavailable_security_ids,"DATA_UNAVAILABLE","No historical OHLCV data available");
   for(const sec of secs){const st=String(sec.update_status||"");
@@ -298,18 +298,18 @@ async function syncDashboardIfNeeded(env) {
   }:{available:false,post_earnings_refreshed:null,awaiting_next_earnings:null,potentially_stale:null,unknown:null};
   const pipelineStatus=Number(readiness.update_failures||0)>0?"DEGRADED":"OPERATIONAL";
   const now=new Date().toISOString();
-  await env.DB.prepare(\`INSERT INTO serving_refresh_state(dataset,source_key,source_as_of,row_count,refreshed_at,status)
+  await env.DB.prepare(`INSERT INTO serving_refresh_state(dataset,source_key,source_as_of,row_count,refreshed_at,status)
     VALUES('dashboard',?,?,?,?, 'SYNCING')
-    ON CONFLICT(dataset) DO UPDATE SET source_key=excluded.source_key,source_as_of=excluded.source_as_of,row_count=excluded.row_count,refreshed_at=excluded.refreshed_at,status='SYNCING'\`)
+    ON CONFLICT(dataset) DO UPDATE SET source_key=excluded.source_key,source_as_of=excluded.source_as_of,row_count=excluded.row_count,refreshed_at=excluded.refreshed_at,status='SYNCING'`)
     .bind(sourceKey,date,queue.length,now).run();
   await env.DB.prepare("DELETE FROM dashboard_review_queue").run();
-  const stmts=queue.map(r=>env.DB.prepare(\`INSERT OR REPLACE INTO dashboard_review_queue
+  const stmts=queue.map(r=>env.DB.prepare(`INSERT OR REPLACE INTO dashboard_review_queue
     (security_id,ticker,category,reason,screening_updated_at,recorded_earnings_date,last_market_date)
-    VALUES(?,?,?,?,?,?,?)\`).bind(r.security_id,r.ticker??null,r.category,r.reason??null,r.screening_updated_at??null,r.recorded_earnings_date??null,r.last_market_date??null));
+    VALUES(?,?,?,?,?,?,?)`).bind(r.security_id,r.ticker??null,r.category,r.reason??null,r.screening_updated_at??null,r.recorded_earnings_date??null,r.last_market_date??null));
   for(let i=0;i<stmts.length;i+=100) await env.DB.batch(stmts.slice(i,i+100));
-  await env.DB.prepare(\`INSERT OR REPLACE INTO dashboard_status
+  await env.DB.prepare(`INSERT OR REPLACE INTO dashboard_status
     (id,snapshot_date,pipeline_status,generated_at,universe_json,changes_json,freshness_json)
-    VALUES(1,?,?,?,?,?,?)\`).bind(date,pipelineStatus,now,JSON.stringify(universe),JSON.stringify({
+    VALUES(1,?,?,?,?,?,?)`).bind(date,pipelineStatus,now,JSON.stringify(universe),JSON.stringify({
       added_count:(changes.added||[]).length,removed_count:(changes.removed||[]).length,
       ticker_changes_count:(changes.ticker_changes||[]).length,previous_snapshot_date:changes.previous_snapshot_date||null
     }),JSON.stringify(freshnessSummary)).run();
