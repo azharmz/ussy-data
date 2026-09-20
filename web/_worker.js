@@ -396,33 +396,42 @@ async function servingStatus(env) {
   }
 }
 
-async function r2Usage(env) {
-  const bucket = env.R2_BUCKET;
-  if (!bucket || typeof bucket.list !== "function") {
-    return json({ error: "R2_BUCKET binding is not configured" }, 503);
+const R2_CACHE_TTL_MS = 60_000;
+let r2Cached = null, r2CachedAt = 0, r2InFlight = null;
+
+function r2Node(name,path){return {name,path,bytes:0,objects:0,children:new Map()}}
+function r2Add(root,key,bytes){
+  root.bytes+=bytes; root.objects++;
+  const parts=key.split("/").filter(Boolean); let node=root,path="";
+  for(const part of parts.slice(0,-1)){
+    path=path ? path+"/"+part : part;
+    if(!node.children.has(part)) node.children.set(part,r2Node(part,path));
+    node=node.children.get(part); node.bytes+=bytes; node.objects++;
   }
-  let cursor, total_objects = 0, total_bytes = 0;
-  const prefixes = new Map();
-  do {
-    const page = await bucket.list({ limit: 1000, ...(cursor ? { cursor } : {}) });
-    for (const o of page.objects) {
-      total_objects++;
-      total_bytes += o.size;
-      const top = o.key.includes("/") ? o.key.split("/")[0] + "/" : "(root)";
-      const x = prefixes.get(top) || { prefix: top, objects: 0, bytes: 0 };
-      x.objects++;
-      x.bytes += o.size;
-      prefixes.set(top, x);
-    }
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  return json({
-    total_objects,
-    total_bytes,
-    total_gib: total_bytes / (1024 ** 3),
-    checked_at: new Date().toISOString(),
-    prefixes: [...prefixes.values()].sort((a, b) => b.bytes - a.bytes)
-  });
+}
+function r2Serialize(node){return {name:node.name,path:node.path,bytes:node.bytes,gib:node.bytes/(1024**3),objects:node.objects,
+  children:[...node.children.values()].sort((a,b)=>b.bytes-a.bytes||a.name.localeCompare(b.name)).map(r2Serialize)}}
+async function scanR2(bucket){
+  let cursor,total_objects=0,total_bytes=0; const root=r2Node("/","");
+  do{
+    const page=await bucket.list({limit:1000,...(cursor?{cursor}:{})});
+    for(const o of page.objects){total_objects++;total_bytes+=o.size;r2Add(root,o.key,o.size)}
+    cursor=page.truncated?page.cursor:undefined;
+  }while(cursor);
+  return {contract:"ussy-r2-live-usage-v2",source:"cloudflare-pages-r2-binding",scope:"ENTIRE_BUCKET",
+    total_objects,total_bytes,total_gib:total_bytes/(1024**3),checked_at:new Date().toISOString(),tree:r2Serialize(root).children};
+}
+async function r2Usage(env) {
+  const bucket=env.R2_BUCKET;
+  if(!bucket||typeof bucket.list!=="function") return json({error:"R2_BUCKET binding is not configured"},503);
+  const now=Date.now();
+  if(r2Cached&&now-r2CachedAt<R2_CACHE_TTL_MS) return json({...r2Cached,cached:true});
+  try{
+    if(!r2InFlight) r2InFlight=scanR2(bucket);
+    const result=await r2InFlight; r2Cached=result; r2CachedAt=Date.now();
+    return json({...result,cached:false});
+  }catch(error){return json({error:"Unable to scan R2 bucket",detail:String(error?.message||error)},500)}
+  finally{r2InFlight=null}
 }
 
 export default {
