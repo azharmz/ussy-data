@@ -8,7 +8,7 @@ from us_market_finalization import finalized_through
 POINTER_KEY="production/completions/current.json"
 PREFIX="production/completions/runs/"
 SCHEMA_VERSION=1
-DOWNSTREAM_VERSION="freshness-plus-web-status-v1"
+DOWNSTREAM_VERSION="freshness-v2"
 
 def read_json(s3,bucket,key):
     return json.loads(s3.get_object(Bucket=bucket,Key=key)["Body"].read())
