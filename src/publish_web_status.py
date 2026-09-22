@@ -471,12 +471,16 @@ def main() -> int:
                 CacheControl="public, max-age=60",
             )
             print("Published: ussy-data-web/status.json")
-        except ClientError:
+        except ClientError as exc:
+            # The web bucket is a presentation projection, not production truth.
+            # Keep canonical R2/READY/EMA completion independent from an optional
+            # dashboard publish permission/configuration failure.
+            code = exc.response.get("Error", {}).get("Code", "unknown")
             print(
-                "ERROR: failed to publish status.json to ussy-data-web",
+                f"WARNING: failed to publish status.json to ussy-data-web ({code}); "
+                "canonical production data is unaffected",
                 file=sys.stderr,
             )
-            return 1
 
     _print_summary(doc)
     return 0
