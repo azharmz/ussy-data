@@ -1,0 +1,21 @@
+name: Corporate action broad Yahoo acquisition validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/run-corporate-action-broad-yahoo-validation'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Discover split events across current universe with batched Yahoo
+        run: python src/validate_broad_yahoo_split_acquisition.py
