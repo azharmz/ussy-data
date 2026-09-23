@@ -1,0 +1,53 @@
+name: Research probe — BK Twelve Data raw morphology
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-bk-twelve-data.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q pandas numpy
+      - name: Clone frozen O'Neil engine
+        run: |
+          git clone -q https://github.com/azharmz/ussy-oneil-patterns.git /tmp/oneil
+          git -C /tmp/oneil checkout -q c433cc1e35a5aa32a46f732cd8c5545935e36e40
+      - name: Replay BK using Twelve Data RAW OHLCV
+        shell: bash
+        env:
+          PYTHONPATH: /tmp/oneil/src
+        run: |
+          python - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          from datetime import date
+          import pandas as pd
+          from oneil_patterns.production.engine import analyze_security
+          key=os.environ["TWELVE_DATA_API_KEY"]
+          params=urllib.parse.urlencode({"symbol":"BK","interval":"1day","start_date":"2024-01-01","end_date":"2025-11-11","adjust":"none","outputsize":5000,"apikey":key})
+          req=urllib.request.Request("https://api.twelvedata.com/time_series?"+params,headers={"User-Agent":"ussy-data-research-probe/1"})
+          with urllib.request.urlopen(req,timeout=30) as r: p=json.loads(r.read())
+          if p.get("status")=="error" or "values" not in p: raise SystemExit("TD error code="+str(p.get("code")))
+          rows=[]
+          for x in p["values"]:
+              rows.append({"date":x["datetime"][:10],"open":float(x["open"]),"high":float(x["high"]),"low":float(x["low"]),"close":float(x["close"]),"volume":float(x["volume"])})
+          f=pd.DataFrame(rows); f["date"]=pd.to_datetime(f["date"]); f=f.sort_values("date").reset_index(drop=True)
+          asof=date(2025,11,10); d=f[f.date.dt.date<=asof].copy()
+          obs=[x.to_dict() if hasattr(x,"to_dict") else x.__dict__ for x in analyze_security("BK","BK",d,asof)]
+          fb=[x for x in obs if x.get("pattern")=="FLAT_BASE"]; oracle=110.87
+          fb.sort(key=lambda x:abs(float(x["pivot_level"])-oracle))
+          result={"symbol":"BK","oracle_pivot":oracle,"price_basis":"TWELVE_DATA_RAW_ADJUST_NONE","rows":len(d),"first":d.date.min().date().isoformat(),"last":d.date.max().date().isoformat()}
+          if not fb: result["result"]="NO_FLAT_BASE_CANDIDATE"
+          else:
+              pvt=float(fb[0]["pivot_level"]); lin=[x for x in fb if abs(float(x["pivot_level"])-pvt)<1e-6]
+              result.update(nearest_delta_pct=pvt/oracle-1,lineage=[{"semantics":x["candidate_semantics"],"state":x["normalized_status"],"start":x["structural_start"],"end":x["structural_end"],"pivot":x["pivot_level"],"depth_pct":x["depth_pct"],"faults":x["detector_faults"]} for x in lin])
+          print("BK_TD_ENGINE_RESULT="+json.dumps(result,separators=(",",":")))
+          PY
