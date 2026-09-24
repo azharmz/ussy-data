@@ -73,6 +73,51 @@ def terminal_date_summary(frame):
     }
 
 
+def recent_session_gap_summary(frame, previous_as_of, candidate_as_of):
+    """Find missing observed US-market sessions while advancing READY.
+
+    Session dates are derived from dates actually present in the cross-sectional
+    READY frame, so weekends/market holidays are not invented. Only the forward
+    window after the previous canonical READY date is checked.
+    """
+    import pandas as pd
+    if not previous_as_of or not candidate_as_of or candidate_as_of <= previous_as_of:
+        return {"previous_as_of": previous_as_of, "candidate_as_of": candidate_as_of,
+                "expected_sessions": [], "gap_security_count": 0, "gaps": {}}
+    dates = pd.to_datetime(frame["date"], errors="raise").dt.date
+    prev = pd.Timestamp(previous_as_of).date()
+    cand = pd.Timestamp(candidate_as_of).date()
+    expected = sorted({d for d in dates if prev < d <= cand})
+    gaps = {}
+    for sid, group in frame.groupby("security_id"):
+        present = set(pd.to_datetime(group["date"], errors="raise").dt.date)
+        terminal = max(present)
+        if terminal < cand:
+            continue
+        missing = [d.isoformat() for d in expected if d <= terminal and d not in present]
+        if missing:
+            gaps[str(sid)] = missing
+    return {
+        "previous_as_of": previous_as_of,
+        "candidate_as_of": candidate_as_of,
+        "expected_sessions": [d.isoformat() for d in expected],
+        "gap_security_count": len(gaps),
+        "gaps": gaps,
+    }
+
+
+def enforce_recent_session_continuity(frame, previous_as_of, candidate_as_of):
+    summary = recent_session_gap_summary(frame, previous_as_of, candidate_as_of)
+    if summary["gap_security_count"]:
+        sample = dict(list(summary["gaps"].items())[:20])
+        raise RuntimeError(
+            "READY recent-session continuity rejected: "
+            f"previous_as_of={previous_as_of} candidate_as_of={candidate_as_of} "
+            f"expected_sessions={summary['expected_sessions']} "
+            f"gap_securities={summary['gap_security_count']} sample={sample}"
+        )
+    return summary
+
 def filter_rolling(frame, readiness, selected):
     import pandas as pd
     required = ["date", "security_id", "ticker", "open", "high", "low", "close", "adj_close", "volume"]
@@ -128,7 +173,14 @@ def main():
     if set(post_counts.index.astype(str)) != ids or (post_counts < readiness["minimum_ready_bars"]).any():
         raise RuntimeError("READY finalization filter violates minimum history coverage")
     terminal = terminal_date_summary(frame)
+    current_ready = read_optional_json("production/ready/current.json")
+    continuity = enforce_recent_session_continuity(
+        frame,
+        current_ready.get("as_of_date") if current_ready else None,
+        terminal["as_of_date"],
+    )
     print(f"READY finalization: finalized_through={cutoff}", flush=True)
+    print("READY recent-session continuity:", json.dumps(continuity, sort_keys=True))
     print("READY terminal-date summary:", json.dumps(terminal, sort_keys=True))
     for key, etag in [("universe/current.json", current_etag), (member_key, member_etag),
                       ("production/rolling/readiness.json", ready_etag), ("production/rolling/latest.parquet", rolling_etag)]:
@@ -137,8 +189,6 @@ def main():
 
     buf = io.BytesIO(); frame.to_parquet(buf, engine="pyarrow", index=False, compression="zstd"); body = buf.getvalue()
     candidate_sha = hashlib.sha256(body).hexdigest()
-    current_ready = read_optional_json("production/ready/current.json")
-
     # Preserve one immutable canonical READY per trading date. A later provider arrival can
     # legitimately advance one security's fixed rolling window after that date was already
     # published. Only when a strict semantic comparison proves a pure forward window shift
