@@ -1,0 +1,61 @@
+name: Training NVDA P1 landmarks one-shot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/training-nvda-p1-one-shot.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q -r requirements.txt
+      - name: Clone frozen O'Neil engine
+        run: |
+          git clone -q https://github.com/azharmz/ussy-oneil-patterns.git /tmp/oneil
+          git -C /tmp/oneil checkout -q c433cc1e35a5aa32a46f732cd8c5545935e36e40
+      - name: Extract 3y NVDA P1 landmarks from canonical R2 history
+        env:
+          PYTHONPATH: /tmp/oneil/src:src
+        run: |
+          mkdir -p diagnostics/training-nvda-p1
+          python - <<'PY'
+          import io,json,os
+          import boto3,pandas as pd
+          from botocore.config import Config
+          from oneil_patterns.landmarks.excursion import extract_excursion_landmarks,ExcursionParams
+          s3=boto3.client("s3",endpoint_url=os.environ["R2_ENDPOINT"],aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],region_name="auto",config=Config(retries={"max_attempts":5,"mode":"adaptive"}))
+          b=os.environ["R2_BUCKET_NAME"]
+          cur=json.loads(s3.get_object(Bucket=b,Key="universe/current.json")["Body"].read())
+          snap=cur["snapshot_date"]
+          mem=json.loads(s3.get_object(Bucket=b,Key=f"universe/membership/{snap}.json")["Body"].read())["records"]
+          hits=[x for x in mem if str(x.get("ticker","")).upper()=="NVDA"]
+          if len(hits)!=1: raise RuntimeError(f"Expected exactly one NVDA membership row, got {len(hits)}")
+          sid=str(hits[0]["security_id"]); key=f"history/ohlcv/{sid}.parquet"
+          raw=s3.get_object(Bucket=b,Key=key)["Body"].read()
+          f=pd.read_parquet(io.BytesIO(raw)).sort_values("date")
+          f["date"]=pd.to_datetime(f["date"])
+          end=f["date"].max(); start=end-pd.DateOffset(years=3)
+          w=f.loc[f["date"]>=start,["date","high","low"]].copy()
+          marks=extract_excursion_landmarks(w,ExcursionParams(reversal_pct=.08,min_separation_sessions=3))
+          rows=[{"type":m.type.value,"price":m.price,"price_date":m.price_date.isoformat(),"confirmed_date":m.confirmed_date.isoformat(),"confirmation_lag_sessions":int((w.reset_index(drop=True)["date"].dt.date==m.confirmed_date).idxmax()-(w.reset_index(drop=True)["date"].dt.date==m.price_date).idxmax())} for m in marks]
+          out={"ticker":"NVDA","security_id":sid,"canonical_key":key,"window_start":w["date"].min().date().isoformat(),"window_end":w["date"].max().date().isoformat(),"bars":len(w),"params":{"reversal_pct":0.08,"min_separation_sessions":3},"landmark_count":len(rows),"landmarks":rows}
+          open("diagnostics/training-nvda-p1/landmarks.json","w").write(json.dumps(out,indent=2))
+          print(json.dumps({k:v for k,v in out.items() if k!="landmarks"},indent=2))
+          for x in rows: print(x)
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: training-nvda-p1-${{ github.run_id }}
+          path: diagnostics/training-nvda-p1/landmarks.json
+          retention-days: 7
