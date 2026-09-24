@@ -13,6 +13,18 @@ from ready_late_arrival_guard import is_pure_late_arrival_window_advance, is_pur
 from us_market_finalization import finalized_through
 
 
+def matching_quarantine(current_ready, quarantine_path=None):
+    if not current_ready:
+        return None
+    path=quarantine_path or (Path(__file__).resolve().parents[1]/"config"/"ready-quarantine.json")
+    if not path.exists():
+        return None
+    payload=json.loads(path.read_text(encoding="utf-8"))
+    for item in payload.get("quarantined_ready", []):
+        if item.get("ready_as_of_date")==current_ready.get("as_of_date") and item.get("ready_sha256")==current_ready.get("sha256"):
+            return item
+    return None
+
 def continuity_predecessor(current_ready, quarantine_path=None):
     """Use trusted predecessor when current READY lineage is quarantined."""
     if not current_ready:
@@ -257,15 +269,27 @@ def main():
     # One deterministic canonical object key per finalized trading date. Existing UUID-keyed
     # snapshots remain valid lineage; same-day reruns are handled above and never create another.
     key = f"production/ready/runs/{terminal['as_of_date']}.parquet"
+    quarantine = matching_quarantine(current_ready)
+    if quarantine and current_ready.get("as_of_date") == terminal["as_of_date"]:
+        # Never overwrite or delete the quarantined immutable evidence. A repaired
+        # same-date generation gets content-addressed identity after continuity passed.
+        key = f"production/ready/runs/{terminal['as_of_date']}-recovery-{candidate_sha[:16]}.parquet"
+        print("READY_QUARANTINE_RECOVERY: preserving bad generation and publishing "+key, flush=True)
     try:
-        s3.head_object(Bucket=bucket, Key=key)
+        existing_head=s3.head_object(Bucket=bucket, Key=key)
     except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey", "NotFound"):
             raise
     else:
-        raise RuntimeError(f"READY canonical date key already exists without matching current lineage: {key}")
+        existing_raw, _ = read(key)
+        if hashlib.sha256(existing_raw).hexdigest() != candidate_sha:
+            raise RuntimeError(f"READY immutable key conflict: {key}")
+        print(f"READY immutable recovery object already exists and matches: {key}", flush=True)
 
-    s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/vnd.apache.parquet")
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+    except ClientError:
+        s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/vnd.apache.parquet")
     if s3.head_object(Bucket=bucket, Key=key)["ContentLength"] != len(body):
         raise RuntimeError("Ready export size verification failed")
     manifest = {
