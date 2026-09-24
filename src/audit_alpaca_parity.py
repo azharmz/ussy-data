@@ -130,7 +130,7 @@ def main() -> None:
         raise RuntimeError("No bounded sample found for target-date gap")
 
     start = (target - timedelta(days=args.lookback_days)).isoformat()
-    end = (target + timedelta(days=2)).isoformat()
+    # Alpaca Basic rejects a multi-day request whose end reaches the recent-SIP window.\n    # For a daily target bar, end is exclusive: stop at the next calendar day.\n    end = (target + timedelta(days=1)).isoformat()
     alpaca = fetch_alpaca(symbols, start, end)
     canonical = frame[frame["ticker"].isin(symbols) & (frame["date"] >= pd.Timestamp(start).date())]
 
