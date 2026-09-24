@@ -13,6 +13,27 @@ def extract(frame,symbol,n):
     if symbol in frame.columns.get_level_values(1): return frame.xs(symbol,axis=1,level=1).dropna(how="all")
     return pd.DataFrame()
 
+def raw_target_session(frame,target):
+    """Select the Yahoo row by its exchange-session label before normalization."""
+    if frame.empty:
+        return frame
+    dates=pd.Index(pd.to_datetime(frame.index,errors="coerce")).date
+    return frame.loc[dates==target.date()].copy()
+
+def normalize_target_session(frame,security_id,ticker,target):
+    """Normalize only a verified target session and preserve its canonical date."""
+    selected=raw_target_session(frame,target)
+    if selected.empty:
+        return pd.DataFrame(columns=OHLCV_COLUMNS)
+    row=normalize_history(selected,security_id,ticker)
+    if len(row)!=1:
+        raise ValueError(f"Expected one Yahoo row for {target.date()}, got {len(row)}")
+    # Yahoo's raw daily index is the authoritative exchange-session label here.
+    # normalize_history converts timezone-aware indexes through UTC, which can
+    # shift a midnight session label by one calendar day for some provider data.
+    row=row.copy(); row["date"]=target
+    return row[OHLCV_COLUMNS]
+
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--target-date",required=True); p.add_argument("--batch-size",type=int,default=25); a=p.parse_args()
     s3=make_s3_client(); b=os.environ["R2_BUCKET_NAME"]; t=pd.Timestamp(a.target_date).normalize()
@@ -31,10 +52,9 @@ def main():
                 hist=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=b,Key=key)["Body"].read())); hist["date"]=pd.to_datetime(hist["date"]).dt.normalize()
                 if t in set(hist["date"]): already.append(ticker); continue
                 one=extract(raw,sym,len(syms))
-                if one.empty: missing.append(ticker); continue
-                row=normalize_history(one,sid,ticker); row=row[pd.to_datetime(row["date"]).dt.normalize()==t]
+                row=normalize_target_session(one,sid,ticker,t)
                 if row.empty: missing.append(ticker); continue
-                merged=pd.concat([hist[OHLCV_COLUMNS],row[OHLCV_COLUMNS]],ignore_index=True).drop_duplicates(["date"],keep="last").sort_values("date").reset_index(drop=True)
+                merged=pd.concat([hist[OHLCV_COLUMNS],row],ignore_index=True).drop_duplicates(["date"],keep="last").sort_values("date").reset_index(drop=True)
                 buf=io.BytesIO(); merged.to_parquet(buf,engine="pyarrow",index=False,compression="zstd"); s3.put_object(Bucket=b,Key=key,Body=buf.getvalue(),ContentType="application/vnd.apache.parquet"); repaired.append(ticker)
             except Exception as e: errors.append({"ticker":ticker,"security_id":sid,"error":str(e)[:300]})
         print("batch=%s checked=%s/%s repaired=%s already=%s missing=%s errors=%s"%(i//a.batch_size+1,min(i+a.batch_size,len(pairs)),len(pairs),len(repaired),len(already),len(missing),len(errors)),flush=True)
