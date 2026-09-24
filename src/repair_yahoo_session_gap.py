@@ -93,7 +93,8 @@ def main():
     ids=sorted((set(f.loc[f.date<t,"security_id"].astype(str)) & set(f.loc[f.date>t,"security_id"].astype(str)))-set(f.loc[f.date==t,"security_id"].astype(str)))
     latest=f.sort_values("date").groupby("security_id").ticker.last().astype(str); pairs=[(sid,latest.loc[sid],yahoo_symbol(latest.loc[sid],sid)) for sid in ids if sid in latest.index]
     repaired=[]; already=[]; missing=[]; errors=[]; start=(t.date()-timedelta(days=1)).isoformat(); end=(t.date()+timedelta(days=1)).isoformat()
-    limit=len(pairs) if a.max_batches is None else min(len(pairs),a.batch_size*a.max_batches)\n    for i in range(0,limit,a.batch_size):
+    limit=len(pairs) if a.max_batches is None else min(len(pairs),a.batch_size*a.max_batches)
+    for i in range(0,limit,a.batch_size):
         batch=pairs[i:i+a.batch_size]; syms=[x[2] for x in batch]
         try: raw=yf.download(syms,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,group_by="ticker",threads=False,timeout=30)
         except Exception as e: errors.append({"batch":i//a.batch_size+1,"error":str(e)[:300]}); missing.extend(x[1] for x in batch); continue
