@@ -39,4 +39,4 @@ class ProviderSymbolTests(unittest.TestCase):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'yahoo_symbol':
                     self.assertEqual(len(node.args), 2, str(path))
                     count += 1
-        self.assertEqual(count, 9)  # Includes onboarding, repair, and pre-backtest evidence paths.
+        self.assertEqual(count, 10)  # Includes onboarding, repair, recovery-audit, and pre-backtest evidence paths.
