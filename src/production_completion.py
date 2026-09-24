@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse, hashlib, json, os
 from datetime import UTC, datetime
+from pathlib import Path
 from bootstrap_ohlcv import make_s3_client
 from us_market_finalization import finalized_through
 
@@ -9,6 +10,19 @@ POINTER_KEY="production/completions/current.json"
 PREFIX="production/completions/runs/"
 SCHEMA_VERSION=1
 DOWNSTREAM_VERSION="freshness-v2"
+QUARANTINE_PATH=Path(__file__).resolve().parents[1]/"config"/"ready-quarantine.json"
+
+
+def quarantined_ready(identity, path=QUARANTINE_PATH):
+    """Return matching known-bad READY evidence, or None."""
+    if not path.exists():
+        return None
+    payload=json.loads(path.read_text(encoding="utf-8"))
+    for item in payload.get("quarantined_ready", []):
+        if (item.get("ready_as_of_date")==identity.get("ready_as_of_date")
+                and item.get("ready_sha256")==identity.get("ready_sha256")):
+            return item
+    return None
 
 def read_json(s3,bucket,key):
     return json.loads(s3.get_object(Bucket=bucket,Key=key)["Body"].read())
@@ -64,6 +78,11 @@ def recovery_stage(s3,bucket):
     try: ready=read_json(s3,bucket,"production/ready/current.json")
     except Exception:return "ohlcv",None
     if ready.get("as_of_date")!=target:return "ohlcv",None
+    ready_identity={"ready_as_of_date":ready.get("as_of_date"),"ready_sha256":ready.get("sha256")}
+    quarantine=quarantined_ready(ready_identity)
+    if quarantine:
+        print("READY_QUARANTINED: "+json.dumps(quarantine,sort_keys=True),flush=True)
+        return "ohlcv",ready_identity
     try: ema=read_json(s3,bucket,"production/indicators/ema/current.json")
     except Exception:return "ema",None
     identity={
@@ -84,6 +103,9 @@ def write_completion(s3,bucket):
     identity=current_identity(s3,bucket)
     if identity["ready_as_of_date"]!=identity["finalized_through"]:
         raise RuntimeError("Cannot complete production: READY is not current finalized identity")
+    quarantine=quarantined_ready(identity)
+    if quarantine:
+        raise RuntimeError("Cannot complete production: READY is quarantined: "+json.dumps(quarantine,sort_keys=True))
     if not lineage_valid(identity):raise RuntimeError("Cannot complete production: EMA lineage does not match READY")
     payload={"schema_version":SCHEMA_VERSION,"status":"FULLY_COMPLETE",**identity,
       "downstream_version":DOWNSTREAM_VERSION,"producer_commit_sha":os.getenv("GITHUB_SHA","local"),

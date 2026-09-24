@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "quarantined_ready": [
+    {
+      "ready_as_of_date": "2026-09-23",
+      "ready_sha256": "ee6bdfae279e87c5cb7e6f545bb1ba24c38b2902f475d9e7e732982696c7898f",
+      "parquet_key": "production/ready/runs/2026-09-23.parquet",
+      "status": "INVALID_CONTINUITY",
+      "reason": "Canonical READY is missing the 2026-09-22 session for 1066 securities that reached 2026-09-23; read-only audit run 35939191539.",
+      "last_known_good_as_of_date": "2026-09-21",
+      "incident_date": "2026-09-24"
+    }
+  ]
+}
