@@ -67,7 +67,7 @@ def main():
                 try:
                     row=normalize_target_session(one,sid,ticker,t)
                 except ValueError as first_error:
-                    solo=yf.download(sym,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,threads=False,timeout=30)
+                    solo=yf.download(sym,start=(t.date()-timedelta(days=7)).isoformat(),end=(t.date()+timedelta(days=3)).isoformat(),interval="1d",auto_adjust=False,actions=False,progress=False,threads=False,timeout=30,repair=True)
                     try:
                         row=normalize_target_session(solo,sid,ticker,t)
                     except Exception:
