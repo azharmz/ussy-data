@@ -64,7 +64,14 @@ def main():
                 hist=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=b,Key=key)["Body"].read())); hist["date"]=pd.to_datetime(hist["date"]).dt.normalize()
                 if t in set(hist["date"]): already.append(ticker); continue
                 one=extract(raw,sym,len(syms))
-                row=normalize_target_session(one,sid,ticker,t)
+                try:
+                    row=normalize_target_session(one,sid,ticker,t)
+                except ValueError as first_error:
+                    solo=yf.download(sym,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,threads=False,timeout=30)
+                    try:
+                        row=normalize_target_session(solo,sid,ticker,t)
+                    except Exception:
+                        raise first_error
                 if row.empty: missing.append(ticker); continue
                 merged=pd.concat([hist[OHLCV_COLUMNS],row],ignore_index=True).drop_duplicates(["date"],keep="last").sort_values("date").reset_index(drop=True)
                 buf=io.BytesIO(); merged.to_parquet(buf,engine="pyarrow",index=False,compression="zstd"); s3.put_object(Bucket=b,Key=key,Body=buf.getvalue(),ContentType="application/vnd.apache.parquet"); repaired.append(ticker)
