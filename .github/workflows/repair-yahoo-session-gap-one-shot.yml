@@ -20,15 +20,33 @@ jobs:
       - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
       - name: Test targeted repair
         run: python -m unittest tests.test_repair_yahoo_session_gap
-      - name: Recheck AZN raw after batch audit
+      - name: Diagnose AZN batch extraction
         run: |
           python - <<'PY'
+          import pandas as pd
           import yfinance as yf
-          ticker="AZN"; start="2026-09-21"; end="2026-09-25"
-          print("=== AZN yf.download repair=False ===")
-          d=yf.download(ticker,start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False,progress=False,group_by="ticker",threads=False)
-          print("index:", repr(d.index)); print(d.to_string())
-          print("=== AZN Ticker.history repair=False ===")
-          h=yf.Ticker(ticker).history(start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False)
-          print("index:", repr(h.index)); print(h.to_string())
+          # Reproduce the exact extraction shape used by the 25-ticker audit.
+          # AZN plus 24 liquid controls is sufficient to expose MultiIndex orientation/selection.
+          syms=["AZN","AAPL","MSFT","NVDA","AMD","AVGO","TSLA","META","GOOGL","AMZN","NFLX","MU","QCOM","INTC","CSCO","ORCL","CRM","ADBE","NOW","PANW","ANET","LLY","V","MA","COST"]
+          raw=yf.download(syms,start="2026-09-21",end="2026-09-23",interval="1d",auto_adjust=False,actions=False,repair=False,progress=False,group_by="ticker",threads=False,timeout=30)
+          print("SYMS=",syms)
+          print("COLUMN_NAMES=",raw.columns.names)
+          print("LEVEL0=",list(raw.columns.get_level_values(0).unique()))
+          print("LEVEL1=",list(raw.columns.get_level_values(1).unique()))
+          print("RAW_INDEX=",repr(raw.index))
+          print("AZN_LEVEL0_PRESENT=","AZN" in raw.columns.get_level_values(0))
+          print("AZN_LEVEL1_PRESENT=","AZN" in raw.columns.get_level_values(1))
+          if "AZN" in raw.columns.get_level_values(0):
+              azn=raw["AZN"].dropna(how="all")
+          elif "AZN" in raw.columns.get_level_values(1):
+              azn=raw.xs("AZN",axis=1,level=1).dropna(how="all")
+          else:
+              azn=pd.DataFrame()
+          print("=== EXTRACTED AZN ===")
+          print("index:",repr(azn.index)); print(azn.to_string())
+          dates=pd.Index(pd.to_datetime(azn.index,errors="coerce")).date if not azn.empty else []
+          print("HAS_2026_09_22=",pd.Timestamp("2026-09-22").date() in set(dates))
+          print("=== RAW AZN COLUMNS WITHOUT dropna ===")
+          if "AZN" in raw.columns.get_level_values(0): print(raw["AZN"].to_string())
+          elif "AZN" in raw.columns.get_level_values(1): print(raw.xs("AZN",axis=1,level=1).to_string())
           PY
