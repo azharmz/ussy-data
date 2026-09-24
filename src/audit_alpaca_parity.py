@@ -13,6 +13,7 @@ import os
 from datetime import timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 import pandas as pd
 
@@ -65,8 +66,30 @@ def fetch_alpaca(symbols: list[str], start: str, end: str) -> pd.DataFrame:
             headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
                      "Accept": "application/json"},
         )
-        with urlopen(req, timeout=60) as response:
-            payload = json.load(response)
+        try:
+            with urlopen(req, timeout=60) as response:
+                payload = json.load(response)
+        except HTTPError as exc:
+            # Print only Alpaca's response diagnostics, never request headers or credentials.
+            raw_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                detail = json.loads(raw_body)
+            except json.JSONDecodeError:
+                detail = {"message": raw_body[:1000]}
+            safe = {
+                "http_status": exc.code,
+                "reason": exc.reason,
+                "response": detail,
+                "request": {
+                    "feed": "sip",
+                    "adjustment": "all",
+                    "timeframe": "1Day",
+                    "symbol_count": len(symbols),
+                    "start": start,
+                    "end": end,
+                },
+            }
+            raise RuntimeError("ALPACA_HTTP_ERROR=" + json.dumps(safe, sort_keys=True)) from exc
         for ticker, bars in payload.get("bars", {}).items():
             for bar in bars:
                 rows.append({
