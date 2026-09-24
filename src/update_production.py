@@ -64,6 +64,21 @@ def normalize_with_individual_fallback(batch_raw,symbol,last_date,max_retries,se
         try:return normalize_history(raw,security_id,ticker)
         except Exception as individual_exc:raise RuntimeError("batch and individual normalization/QC failed; "+f"batch={batch_exc}; individual={individual_exc}") from individual_exc
 
+def merge_downloaded_history(historical, downloaded, last_date):
+    """Persist recovered internal sessions as well as newer Yahoo bars."""
+    if downloaded.empty:
+        empty=historical.iloc[0:0].copy()
+        return historical, empty, empty
+    existing_dates=set(pd.to_datetime(historical["date"]))
+    downloaded=downloaded[OHLCV_COLUMNS].copy()
+    additions=downloaded[downloaded["date"]>last_date].copy()
+    backfills=downloaded[(downloaded["date"]<=last_date) & (~downloaded["date"].isin(existing_dates))].copy()
+    if additions.empty and backfills.empty:
+        return historical, additions, backfills
+    merged=pd.concat([historical,downloaded],ignore_index=True)
+    merged=merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"],keep="last").sort_values("date").reset_index(drop=True)
+    return merged, additions, backfills
+
 def normalize_existing(frame,security_id,ticker):
     missing=set(OHLCV_COLUMNS)-set(frame.columns)
     if missing:raise ValueError(f"Historical Parquet lacks columns: {sorted(missing)}")
@@ -99,9 +114,9 @@ def main():
         for security_id,ticker,symbol,last_date in batch:
             historical=histories[security_id]; key=f"{HISTORY_PREFIX}{security_id}.parquet"
             try:
-                raw=extract_symbol(batch_frame,symbol,len(symbols)); normalized=normalize_with_individual_fallback(raw,symbol,last_date,args.max_retries,security_id,ticker); downloaded=historical.iloc[0:0].copy() if normalized.empty else normalized; additions=downloaded[downloaded["date"]>last_date].copy()
-                if not additions.empty:
-                    merged=pd.concat([historical,downloaded],ignore_index=True); merged=merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"],keep="last").sort_values("date").reset_index(drop=True); write_parquet(s3,bucket,key,merged); historical=merged; histories[security_id]=historical; new_rows.append(additions[OHLCV_COLUMNS]); updated_histories+=1; LOG.info("Updated %s through %s (+%s bars)",ticker,historical["date"].iloc[-1].date(),len(additions))
+                raw=extract_symbol(batch_frame,symbol,len(symbols)); normalized=normalize_with_individual_fallback(raw,symbol,last_date,args.max_retries,security_id,ticker); downloaded=historical.iloc[0:0].copy() if normalized.empty else normalized; merged,additions,backfills=merge_downloaded_history(historical,downloaded,last_date)
+                if not additions.empty or not backfills.empty:
+                    write_parquet(s3,bucket,key,merged); historical=merged; histories[security_id]=historical; new_rows.append(pd.concat([backfills,additions],ignore_index=True)[OHLCV_COLUMNS]); updated_histories+=1; LOG.info("Updated %s through %s (+%s new, +%s recovered internal bars)",ticker,historical["date"].iloc[-1].date(),len(additions),len(backfills))
                 rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat()})
             except Exception as exc:
                 failures.append({"security_id":security_id,"ticker":ticker,"error":str(exc)[:500]}); LOG.error("Failed production update for %s (%s): %s",ticker,security_id,exc); print(f"::warning title=Production OHLCV update failed::{ticker} ({security_id}): {str(exc)[:300]}"); rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"stale_after_failure"})

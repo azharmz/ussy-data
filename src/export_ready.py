@@ -5,12 +5,28 @@ import hashlib
 import io
 import json
 import os
+from pathlib import Path
 from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 from ready_snapshot_guard import decide_ready_publication
 from ready_late_arrival_guard import is_pure_late_arrival_window_advance, is_pure_security_set_reduction
 from us_market_finalization import finalized_through
 
+
+def continuity_predecessor(current_ready, quarantine_path=None):
+    """Use trusted predecessor when current READY lineage is quarantined."""
+    if not current_ready:
+        return None
+    path=quarantine_path or (Path(__file__).resolve().parents[1]/"config"/"ready-quarantine.json")
+    if path.exists():
+        payload=json.loads(path.read_text(encoding="utf-8"))
+        for item in payload.get("quarantined_ready", []):
+            if item.get("ready_as_of_date")==current_ready.get("as_of_date") and item.get("ready_sha256")==current_ready.get("sha256"):
+                trusted=item.get("last_known_good_as_of_date")
+                if not trusted:
+                    raise RuntimeError("Quarantined READY lacks last_known_good_as_of_date")
+                return trusted
+    return current_ready.get("as_of_date")
 
 def select_ready_ids(readiness, membership, snapshot):
     if readiness.get("snapshot_date") != snapshot or membership.get("snapshot_date") != snapshot:
@@ -176,7 +192,7 @@ def main():
     current_ready = read_optional_json("production/ready/current.json")
     continuity = enforce_recent_session_continuity(
         frame,
-        current_ready.get("as_of_date") if current_ready else None,
+        continuity_predecessor(current_ready),
         terminal["as_of_date"],
     )
     print(f"READY finalization: finalized_through={cutoff}", flush=True)
