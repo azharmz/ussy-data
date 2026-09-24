@@ -138,6 +138,9 @@ def main():
             raise RuntimeError("Cannot dispatch: current production identity is not durably complete")
         if not marker_matches(marker,identity):
             raise RuntimeError("Cannot dispatch: completion marker does not match current READY/EMA identity")
+        quarantine=quarantined_ready(identity)
+        if quarantine:
+            raise RuntimeError("Cannot dispatch: READY is quarantined: "+json.dumps(quarantine,sort_keys=True))
         required={
           "completion_key":marker.get("completion_key"),"completion_sha256":marker.get("completion_sha256"),
           "ready_as_of_date":identity["ready_as_of_date"],"ready_parquet_key":identity["ready_parquet_key"],

@@ -60,4 +60,7 @@ class CompletionTests(unittest.TestCase):
    production_completion.intended_finalized_identity=lambda:"2026-09-23"
    self.assertEqual(recovery_stage(S(),"b")[0],"ohlcv")
   finally:production_completion.intended_finalized_identity=old_target
+ def test_completion_marker_match_does_not_clear_quarantine(self):
+  i=self.identity();i["ready_as_of_date"]="2026-09-23";i["ready_sha256"]="ee6bdfae279e87c5cb7e6f545bb1ba24c38b2902f475d9e7e732982696c7898f"
+  self.assertIsNotNone(quarantined_ready(i))
 if __name__=="__main__":unittest.main()
