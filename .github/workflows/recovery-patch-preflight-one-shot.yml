@@ -1,0 +1,24 @@
+name: Recovery patch preflight one-shot
+
+on:
+  push:
+    paths:
+      - ".github/workflows/recovery-patch-preflight-one-shot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Compile patched modules
+        run: python -m py_compile src/update_production.py src/export_ready.py
+      - name: Run focused recovery tests
+        run: python -m unittest tests.test_production_fallback tests.test_ready_terminal_coherence tests.test_production_completion
