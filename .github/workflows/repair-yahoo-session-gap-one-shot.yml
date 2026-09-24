@@ -20,33 +20,64 @@ jobs:
       - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
       - name: Test targeted repair
         run: python -m unittest tests.test_repair_yahoo_session_gap
-      - name: Diagnose AZN batch extraction
+      - name: Audit Sep 22 raw Yahoo full-row validity
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           python - <<'PY'
+          import io, json, os
+          import boto3
           import pandas as pd
           import yfinance as yf
-          # Reproduce the exact extraction shape used by the 25-ticker audit.
-          # AZN plus 24 liquid controls is sufficient to expose MultiIndex orientation/selection.
-          syms=["AZN","AAPL","MSFT","NVDA","AMD","AVGO","TSLA","META","GOOGL","AMZN","NFLX","MU","QCOM","INTC","CSCO","ORCL","CRM","ADBE","NOW","PANW","ANET","LLY","V","MA","COST"]
-          raw=yf.download(syms,start="2026-09-21",end="2026-09-23",interval="1d",auto_adjust=False,actions=False,repair=False,progress=False,group_by="ticker",threads=False,timeout=30)
-          print("SYMS=",syms)
-          print("COLUMN_NAMES=",raw.columns.names)
-          print("LEVEL0=",list(raw.columns.get_level_values(0).unique()))
-          print("LEVEL1=",list(raw.columns.get_level_values(1).unique()))
-          print("RAW_INDEX=",repr(raw.index))
-          print("AZN_LEVEL0_PRESENT=","AZN" in raw.columns.get_level_values(0))
-          print("AZN_LEVEL1_PRESENT=","AZN" in raw.columns.get_level_values(1))
-          if "AZN" in raw.columns.get_level_values(0):
-              azn=raw["AZN"].dropna(how="all")
-          elif "AZN" in raw.columns.get_level_values(1):
-              azn=raw.xs("AZN",axis=1,level=1).dropna(how="all")
-          else:
-              azn=pd.DataFrame()
-          print("=== EXTRACTED AZN ===")
-          print("index:",repr(azn.index)); print(azn.to_string())
-          dates=pd.Index(pd.to_datetime(azn.index,errors="coerce")).date if not azn.empty else []
-          print("HAS_2026_09_22=",pd.Timestamp("2026-09-22").date() in set(dates))
-          print("=== RAW AZN COLUMNS WITHOUT dropna ===")
-          if "AZN" in raw.columns.get_level_values(0): print(raw["AZN"].to_string())
-          elif "AZN" in raw.columns.get_level_values(1): print(raw.xs("AZN",axis=1,level=1).to_string())
+          from botocore.config import Config
+
+          target=pd.Timestamp("2026-09-22").normalize()
+          s3=boto3.client("s3",endpoint_url=os.environ["R2_ENDPOINT"],aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],config=Config(signature_version="s3v4"))
+          bucket=os.environ["R2_BUCKET_NAME"]
+          m=json.loads(s3.get_object(Bucket=bucket,Key="production/ready/current.json")["Body"].read())
+          f=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=bucket,Key=m["parquet_key"])["Body"].read()),columns=["security_id","ticker","date"])
+          f["date"]=pd.to_datetime(f["date"]).dt.normalize()
+          ids=sorted((set(f.loc[f.date<target,"security_id"].astype(str)) & set(f.loc[f.date>target,"security_id"].astype(str)))-set(f.loc[f.date==target,"security_id"].astype(str)))
+          latest=f.sort_values("date").groupby("security_id").ticker.last().astype(str)
+          pairs=[(sid,latest.loc[sid],str(latest.loc[sid]).strip().replace(".","-")) for sid in ids if sid in latest.index]
+
+          fields=["Open","High","Low","Close","Adj Close","Volume"]
+          valid=[]; invalid=[]; errors=[]
+          def extract(frame,symbol,n):
+              if frame.empty: return pd.DataFrame()
+              if not isinstance(frame.columns,pd.MultiIndex): return frame.copy() if n==1 else pd.DataFrame()
+              if symbol in frame.columns.get_level_values(0): return frame[symbol]
+              if symbol in frame.columns.get_level_values(1): return frame.xs(symbol,axis=1,level=1)
+              return pd.DataFrame()
+          def inspect_target(frame):
+              if frame.empty: return False,"NO_FRAME",{}
+              dates=pd.Index(pd.to_datetime(frame.index,errors="coerce")).date
+              mask=[d==target.date() for d in dates]
+              if not any(mask): return False,"NO_TARGET_ROW",{}
+              row=frame.loc[mask].iloc[-1]
+              missing=[c for c in fields if c not in row.index or pd.isna(row[c])]
+              vals={c:(None if c not in row.index or pd.isna(row[c]) else float(row[c])) for c in fields}
+              if missing: return False,"MISSING_FIELDS:"+",".join(missing),vals
+              return True,"VALID",vals
+
+          bs=25
+          for i in range(0,len(pairs),bs):
+              batch=pairs[i:i+bs]; syms=[x[2] for x in batch]
+              try:
+                  raw=yf.download(syms,start="2026-09-21",end="2026-09-23",interval="1d",auto_adjust=False,actions=False,repair=False,keepna=True,progress=False,group_by="ticker",threads=False,timeout=30)
+              except Exception as e:
+                  errors.extend({"security_id":x[0],"ticker":x[1],"error":str(e)[:200]} for x in batch); continue
+              for sid,ticker,sym in batch:
+                  try:
+                      ok,reason,vals=inspect_target(extract(raw,sym,len(syms)))
+                      (valid if ok else invalid).append({"security_id":sid,"ticker":ticker,"reason":reason,**vals})
+                  except Exception as e: errors.append({"security_id":sid,"ticker":ticker,"error":str(e)[:200]})
+              print(f"batch={i//bs+1} checked={min(i+bs,len(pairs))}/{len(pairs)} valid={len(valid)} invalid={len(invalid)} errors={len(errors)}",flush=True)
+
+          out={"target_date":"2026-09-22","gap_population":len(pairs),"raw_valid_count":len(valid),"raw_invalid_count":len(invalid),"error_count":len(errors),"raw_invalid":invalid,"errors":errors}
+          print("YAHOO_RAW_FULLROW_AUDIT="+json.dumps(out,sort_keys=True))
+          if errors: raise RuntimeError("raw full-row audit incomplete")
           PY
