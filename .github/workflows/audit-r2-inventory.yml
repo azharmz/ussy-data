@@ -2,6 +2,9 @@ name: Audit R2 inventory
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/audit-r2-inventory.yml"
 
 permissions:
   contents: read
@@ -26,3 +29,39 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Audit entire R2 bucket (read-only)
         run: python src/audit_r2_inventory.py
+      - name: Inspect production daily 2026-09-22 (read-only)
+        run: |
+          python - <<'PY'
+          import io, os, json
+          import pandas as pd
+          from src.bootstrap_ohlcv import make_s3_client
+
+          key = "production/daily/2026-09-22.parquet"
+          s3 = make_s3_client()
+          bucket = os.environ["R2_BUCKET_NAME"]
+          obj = s3.get_object(Bucket=bucket, Key=key)
+          raw = obj["Body"].read()
+          df = pd.read_parquet(io.BytesIO(raw))
+          sid = df["security_id"].astype(str)
+          ticker = df["ticker"].astype(str)
+          numeric = ["open","high","low","close","adj_close","volume"]
+          nulls = {c:int(df[c].isna().sum()) for c in numeric if c in df.columns}
+          dup_sid = int(sid.duplicated().sum())
+          azn = df.loc[ticker.eq("AZN")].copy()
+          for c in azn.columns:
+              if pd.api.types.is_datetime64_any_dtype(azn[c]):
+                  azn[c] = azn[c].astype(str)
+          report = {
+              "mode":"READ_ONLY",
+              "key":key,
+              "bytes":len(raw),
+              "rows":len(df),
+              "unique_security_ids":int(sid.nunique()),
+              "unique_tickers":int(ticker.nunique()),
+              "duplicate_security_ids":dup_sid,
+              "null_ohlcv":nulls,
+              "date_counts":df["date"].astype(str).value_counts().to_dict() if "date" in df.columns else {},
+              "azn":azn.to_dict(orient="records"),
+          }
+          print("DAILY_2026_09_22_AUDIT="+json.dumps(report,default=str,sort_keys=True),flush=True)
+          PY
