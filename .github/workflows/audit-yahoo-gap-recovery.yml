@@ -1,0 +1,35 @@
+name: Audit Yahoo gap recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: Missing market session to audit
+        required: true
+        default: "2026-09-22"
+      batch_size:
+        description: Yahoo symbols per request
+        required: true
+        default: "25"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Audit Yahoo recovery without R2 writes
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          PYTHONUNBUFFERED: "1"
+        run: python src/audit_yahoo_gap_recovery.py --target-date "${{ inputs.target_date }}" --batch-size "${{ inputs.batch_size }}"
