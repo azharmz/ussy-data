@@ -1,4 +1,4 @@
-name: Repair Yahoo session gap one-shot
+name: Repair Yahoo session gap one-shot 
 on:
   push:
     paths:
