@@ -26,4 +26,23 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        run: python src/repair_yahoo_session_gap.py --target-date 2026-09-22 --batch-size 25 --audit-only
+        run: |
+          python - <<'PY'
+          import yfinance as yf
+          import pandas as pd
+          ticker="AZN"
+          start="2026-09-21"
+          end="2026-09-25"
+          print("=== yf.download RAW AZN ===")
+          d=yf.download(ticker,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,group_by="ticker",threads=False)
+          print("index:", repr(d.index))
+          print(d.to_string())
+          print("=== Ticker.history RAW AZN repair=False ===")
+          h=yf.Ticker(ticker).history(start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False)
+          print("index:", repr(h.index))
+          print(h.to_string())
+          print("=== Ticker.history RAW AZN repair=True ===")
+          hr=yf.Ticker(ticker).history(start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=True)
+          print("index:", repr(hr.index))
+          print(hr.to_string())
+          PY
