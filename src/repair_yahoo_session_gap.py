@@ -1,0 +1,43 @@
+"""Targeted idempotent repair of one missing Yahoo session."""
+import argparse, io, json, os
+from datetime import timedelta
+import pandas as pd
+import yfinance as yf
+from bootstrap_ohlcv import make_s3_client, yahoo_symbol, normalize_history, OHLCV_COLUMNS
+HISTORY_PREFIX="history/ohlcv/"
+
+def extract(frame,symbol,n):
+    if frame.empty: return pd.DataFrame()
+    if not isinstance(frame.columns,pd.MultiIndex): return frame.copy() if n==1 else pd.DataFrame()
+    if symbol in frame.columns.get_level_values(0): return frame[symbol].dropna(how="all")
+    if symbol in frame.columns.get_level_values(1): return frame.xs(symbol,axis=1,level=1).dropna(how="all")
+    return pd.DataFrame()
+
+def main():
+    p=argparse.ArgumentParser(); p.add_argument("--target-date",required=True); p.add_argument("--batch-size",type=int,default=25); a=p.parse_args()
+    s3=make_s3_client(); b=os.environ["R2_BUCKET_NAME"]; t=pd.Timestamp(a.target_date).normalize()
+    m=json.loads(s3.get_object(Bucket=b,Key="production/ready/current.json")["Body"].read())
+    f=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=b,Key=m["parquet_key"])["Body"].read()),columns=["security_id","ticker","date"]); f["date"]=pd.to_datetime(f["date"]).dt.normalize()
+    ids=sorted((set(f.loc[f.date<t,"security_id"].astype(str)) & set(f.loc[f.date>t,"security_id"].astype(str)))-set(f.loc[f.date==t,"security_id"].astype(str)))
+    latest=f.sort_values("date").groupby("security_id").ticker.last().astype(str); pairs=[(sid,latest.loc[sid],yahoo_symbol(latest.loc[sid],sid)) for sid in ids if sid in latest.index]
+    repaired=[]; already=[]; missing=[]; errors=[]; start=(t.date()-timedelta(days=1)).isoformat(); end=(t.date()+timedelta(days=1)).isoformat()
+    for i in range(0,len(pairs),a.batch_size):
+        batch=pairs[i:i+a.batch_size]; syms=[x[2] for x in batch]
+        try: raw=yf.download(syms,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,group_by="ticker",threads=False,timeout=30)
+        except Exception as e: errors.append({"batch":i//a.batch_size+1,"error":str(e)[:300]}); missing.extend(x[1] for x in batch); continue
+        for sid,ticker,sym in batch:
+            key=HISTORY_PREFIX+sid+".parquet"
+            try:
+                hist=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=b,Key=key)["Body"].read())); hist["date"]=pd.to_datetime(hist["date"]).dt.normalize()
+                if t in set(hist["date"]): already.append(ticker); continue
+                one=extract(raw,sym,len(syms))
+                if one.empty: missing.append(ticker); continue
+                row=normalize_history(one,sid,ticker); row=row[pd.to_datetime(row["date"]).dt.normalize()==t]
+                if row.empty: missing.append(ticker); continue
+                merged=pd.concat([hist[OHLCV_COLUMNS],row[OHLCV_COLUMNS]],ignore_index=True).drop_duplicates(["date"],keep="last").sort_values("date").reset_index(drop=True)
+                buf=io.BytesIO(); merged.to_parquet(buf,engine="pyarrow",index=False,compression="zstd"); s3.put_object(Bucket=b,Key=key,Body=buf.getvalue(),ContentType="application/vnd.apache.parquet"); repaired.append(ticker)
+            except Exception as e: errors.append({"ticker":ticker,"security_id":sid,"error":str(e)[:300]})
+        print("batch=%s checked=%s/%s repaired=%s already=%s missing=%s errors=%s"%(i//a.batch_size+1,min(i+a.batch_size,len(pairs)),len(pairs),len(repaired),len(already),len(missing),len(errors)),flush=True)
+    out={"status":"APPLY","target_date":a.target_date,"gap_population":len(pairs),"repaired":len(repaired),"already_present":len(already),"still_missing_count":len(missing),"still_missing":missing,"errors":errors}; print("YAHOO_GAP_REPAIR="+json.dumps(out,sort_keys=True))
+    if missing or errors: raise RuntimeError("Targeted Yahoo gap repair incomplete")
+if __name__=="__main__": main()
