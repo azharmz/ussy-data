@@ -34,7 +34,7 @@ def normalize_target_session(frame,security_id,ticker,target):
     src=selected.iloc[0]
     vals={name:pd.to_numeric(src[name],errors="coerce") for name in required}
     if any(pd.isna(vals[name]) for name in required):
-        raise ValueError("Yahoo target row contains non-numeric OHLCV")
+        raise ValueError(f"Yahoo target row contains non-numeric OHLCV: { {k: repr(vals[k]) for k in required} }")
     if min(vals["Open"],vals["High"],vals["Low"],vals["Close"],vals["Adj Close"])<=0 or vals["Volume"]<0:
         raise ValueError("Yahoo target row contains invalid OHLCV values")
     if vals["High"] < max(vals["Open"],vals["Close"],vals["Low"]) or vals["Low"] > min(vals["Open"],vals["Close"],vals["High"]):
