@@ -15,6 +15,9 @@ on:
         description: Yahoo tickers per controlled batch
         required: true
         default: "10"
+  push:
+    paths:
+      - ".github/workflows/production-daily.yml"
   schedule:
     # 05:07 UTC = 13:07 WITA. Well after the prior regular US close + 90m buffer.
     - cron: "7 5 * * 1-5"
