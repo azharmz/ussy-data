@@ -20,7 +20,7 @@ jobs:
       - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
       - name: Test targeted repair
         run: python -m unittest tests.test_repair_yahoo_session_gap
-      - name: Audit Sep 22 Yahoo availability (no R2 writes)
+      - name: Audit Sep 22 raw Yahoo availability (repair disabled)
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -28,21 +28,50 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           python - <<'PY'
-          import yfinance as yf
+          import io, json, os
           import pandas as pd
-          ticker="AZN"
-          start="2026-09-21"
-          end="2026-09-25"
-          print("=== yf.download RAW AZN ===")
-          d=yf.download(ticker,start=start,end=end,interval="1d",auto_adjust=False,actions=False,progress=False,group_by="ticker",threads=False)
-          print("index:", repr(d.index))
-          print(d.to_string())
-          print("=== Ticker.history RAW AZN repair=False ===")
-          h=yf.Ticker(ticker).history(start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False)
-          print("index:", repr(h.index))
-          print(h.to_string())
-          print("=== Ticker.history RAW AZN repair=True ===")
-          hr=yf.Ticker(ticker).history(start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=True)
-          print("index:", repr(hr.index))
-          print(hr.to_string())
+          import yfinance as yf
+          from src.bootstrap_ohlcv import make_s3_client, yahoo_symbol
+
+          target=pd.Timestamp("2026-09-22").normalize()
+          s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
+          m=json.loads(s3.get_object(Bucket=bucket,Key="production/ready/current.json")["Body"].read())
+          f=pd.read_parquet(io.BytesIO(s3.get_object(Bucket=bucket,Key=m["parquet_key"])["Body"].read()),columns=["security_id","ticker","date"])
+          f["date"]=pd.to_datetime(f["date"]).dt.normalize()
+          ids=sorted((set(f.loc[f.date<target,"security_id"].astype(str)) & set(f.loc[f.date>target,"security_id"].astype(str)))-set(f.loc[f.date==target,"security_id"].astype(str)))
+          latest=f.sort_values("date").groupby("security_id").ticker.last().astype(str)
+          pairs=[(sid,latest.loc[sid],yahoo_symbol(latest.loc[sid],sid)) for sid in ids if sid in latest.index]
+
+          available=[]; unavailable=[]; errors=[]
+          def extract(frame,symbol,n):
+              if frame.empty: return pd.DataFrame()
+              if not isinstance(frame.columns,pd.MultiIndex): return frame.copy() if n==1 else pd.DataFrame()
+              if symbol in frame.columns.get_level_values(0): return frame[symbol].dropna(how="all")
+              if symbol in frame.columns.get_level_values(1): return frame.xs(symbol,axis=1,level=1).dropna(how="all")
+              return pd.DataFrame()
+          def has_target(frame):
+              if frame.empty: return False
+              dates=pd.Index(pd.to_datetime(frame.index,errors="coerce")).date
+              return target.date() in set(dates)
+
+          batch_size=25
+          for i in range(0,len(pairs),batch_size):
+              batch=pairs[i:i+batch_size]; syms=[x[2] for x in batch]
+              try:
+                  raw=yf.download(syms,start="2026-09-21",end="2026-09-23",interval="1d",auto_adjust=False,actions=False,repair=False,progress=False,group_by="ticker",threads=False,timeout=30)
+              except Exception as e:
+                  errors.extend({"ticker":x[1],"security_id":x[0],"error":str(e)[:200]} for x in batch)
+                  continue
+              for sid,ticker,sym in batch:
+                  try:
+                      if has_target(extract(raw,sym,len(syms))):
+                          available.append(ticker)
+                      else:
+                          unavailable.append(ticker)
+                  except Exception as e:
+                      errors.append({"ticker":ticker,"security_id":sid,"error":str(e)[:200]})
+              print(f"batch={i//batch_size+1} checked={min(i+batch_size,len(pairs))}/{len(pairs)} raw_available={len(available)} raw_not_available={len(unavailable)} errors={len(errors)}",flush=True)
+          out={"target_date":"2026-09-22","gap_population":len(pairs),"raw_available_count":len(available),"raw_not_available_count":len(unavailable),"error_count":len(errors),"raw_not_available":unavailable,"errors":errors}
+          print("YAHOO_RAW_SESSION_AUDIT="+json.dumps(out,sort_keys=True))
+          if errors: raise RuntimeError("raw Yahoo audit incomplete")
           PY
