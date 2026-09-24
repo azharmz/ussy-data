@@ -3,7 +3,8 @@ on:
   push:
     paths:
       - "src/repair_yahoo_session_gap.py"
-      - "tests/test_repair_yahoo_session_gap.py"\n      - ".github/workflows/repair-yahoo-session-gap-one-shot.yml"
+      - "tests/test_repair_yahoo_session_gap.py"
+      - ".github/workflows/repair-yahoo-session-gap-one-shot.yml"
 permissions:
   contents: read
 jobs:
