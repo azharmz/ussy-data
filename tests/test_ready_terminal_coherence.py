@@ -6,7 +6,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from export_ready import terminal_date_summary
+from export_ready import terminal_date_summary, recent_session_gap_summary, enforce_recent_session_continuity
 
 
 class ReadyTerminalCoherenceTests(unittest.TestCase):
@@ -26,6 +26,31 @@ class ReadyTerminalCoherenceTests(unittest.TestCase):
         })
         with self.assertRaisesRegex(RuntimeError, 'partial leading-edge'):
             terminal_date_summary(frame)
+
+    def test_catchup_gap_is_detected_without_inventing_weekend_sessions(self):
+        frame = pd.DataFrame({
+            'security_id': ['A', 'A', 'A', 'B', 'B', 'B', 'B'],
+            'date': pd.to_datetime([
+                '2026-09-21', '2026-09-22', '2026-09-23',
+                '2026-09-21', '2026-09-23', '2026-09-22', '2026-09-23',
+            ]),
+        })
+        # Remove B's 22 row while keeping the cross-section's observed 22 session.
+        frame = frame.drop(index=5).reset_index(drop=True)
+        summary = recent_session_gap_summary(frame, '2026-09-21', '2026-09-23')
+        self.assertEqual(summary['expected_sessions'], ['2026-09-22', '2026-09-23'])
+        self.assertEqual(summary['gap_security_count'], 1)
+        self.assertEqual(summary['gaps']['B'], ['2026-09-22'])
+        with self.assertRaisesRegex(RuntimeError, 'continuity rejected'):
+            enforce_recent_session_continuity(frame, '2026-09-21', '2026-09-23')
+
+    def test_stale_security_does_not_create_false_internal_gap(self):
+        frame = pd.DataFrame({
+            'security_id': ['A', 'A', 'A', 'B'],
+            'date': pd.to_datetime(['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-21']),
+        })
+        summary = recent_session_gap_summary(frame, '2026-09-21', '2026-09-23')
+        self.assertEqual(summary['gap_security_count'], 0)
 
 
 if __name__ == '__main__':
