@@ -76,6 +76,17 @@ class ProductionFallbackTests(unittest.TestCase):
         self.assertTrue(result.empty)
         normalize.assert_not_called()
 
+    def test_merge_downloaded_history_repairs_internal_gap(self):
+        cols=update_production.OHLCV_COLUMNS
+        def row(date, close):
+            return {"date":pd.Timestamp(date),"security_id":"S","ticker":"X","open":close,"high":close,"low":close,"close":close,"adj_close":close,"volume":100}
+        historical=pd.DataFrame([row("2026-09-21",10),row("2026-09-23",12)],columns=cols)
+        downloaded=pd.DataFrame([row("2026-09-21",10),row("2026-09-22",11),row("2026-09-23",12)],columns=cols)
+        merged,additions,backfills=update_production.merge_downloaded_history(historical,downloaded,pd.Timestamp("2026-09-23"))
+        self.assertTrue(additions.empty)
+        self.assertEqual(backfills["date"].dt.strftime("%Y-%m-%d").tolist(),["2026-09-22"])
+        self.assertEqual(merged["date"].dt.strftime("%Y-%m-%d").tolist(),["2026-09-21","2026-09-22","2026-09-23"])
+
 
 if __name__ == "__main__":
     unittest.main()

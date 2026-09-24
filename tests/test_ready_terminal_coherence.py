@@ -6,7 +6,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from export_ready import terminal_date_summary, recent_session_gap_summary, enforce_recent_session_continuity
+from export_ready import terminal_date_summary, recent_session_gap_summary, enforce_recent_session_continuity, continuity_predecessor
 
 
 class ReadyTerminalCoherenceTests(unittest.TestCase):
@@ -51,6 +51,15 @@ class ReadyTerminalCoherenceTests(unittest.TestCase):
         })
         summary = recent_session_gap_summary(frame, '2026-09-21', '2026-09-23')
         self.assertEqual(summary['gap_security_count'], 0)
+
+    def test_quarantined_current_uses_last_known_good_predecessor(self):
+        import json, tempfile
+        current={"as_of_date":"2026-09-23","sha256":"bad"}
+        payload={"quarantined_ready":[{"ready_as_of_date":"2026-09-23","ready_sha256":"bad","last_known_good_as_of_date":"2026-09-21"}]}
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"q.json"
+            path.write_text(json.dumps(payload))
+            self.assertEqual(continuity_predecessor(current,path),"2026-09-21")
 
 
 if __name__ == '__main__':
