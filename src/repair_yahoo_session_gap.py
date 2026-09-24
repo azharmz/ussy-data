@@ -25,12 +25,17 @@ def normalize_target_session(frame,security_id,ticker,target):
     selected=raw_target_session(frame,target)
     if selected.empty:
         return pd.DataFrame(columns=OHLCV_COLUMNS)
+    # The selected frame already has a verified Yahoo exchange-session label.
+    # Give normalize_history the column/index shape it expects without changing
+    # the session label. extract() leaves columns.name="Price"; reset_index()
+    # in normalize_history then inherits that name and pandas' rename does not
+    # reliably expose the Date column. Clear axis metadata first.
+    selected=selected.copy()
+    selected.columns.name=None
+    selected.index.name="Date"
     row=normalize_history(selected,security_id,ticker)
     if len(row)!=1:
         raise ValueError(f"Expected one Yahoo row for {target.date()}, got {len(row)}")
-    # Yahoo's raw daily index is the authoritative exchange-session label here.
-    # normalize_history converts timezone-aware indexes through UTC, which can
-    # shift a midnight session label by one calendar day for some provider data.
     row=row.copy(); row["date"]=target
     return row[OHLCV_COLUMNS]
 
