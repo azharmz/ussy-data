@@ -20,6 +20,8 @@ STOOQ_PREFIX="recovery/stooq-2026-09-25/history/ohlcv/"
 BACKUP_PREFIX="recovery/stooq-2026-09-25/pre-sep22-repair/history/ohlcv/"
 REPORT_PREFIX="recovery/stooq-2026-09-25/sep22-repair/"
 EXPECTED=1066
+EXPECTED_READY=1061
+EXPECTED_UNRESOLVED={"KYG096751022","KYG837611170","US5784731003","VGG646271137","US68840D1028"}
 
 def get_parquet(s3,bucket,key):
     return pd.read_parquet(io.BytesIO(s3.get_object(Bucket=bucket,Key=key)["Body"].read()))
@@ -83,13 +85,15 @@ def main():
     print(f"[manifest] r2://{bucket}/{manifest_key} targets={len(targets)} ready={len(source_rows)} unresolved={len(source_missing)+len(source_bad)}",flush=True)
     if len(targets)!=EXPECTED:
         raise RuntimeError(f"Fail closed: incident population expected {EXPECTED}, got {len(targets)}")
-    if source_missing or source_bad or len(source_rows)!=EXPECTED:
-        raise RuntimeError(f"Fail closed: Stooq coverage/QC incomplete missing={len(source_missing)} bad={len(source_bad)} ready={len(source_rows)}")
+    unresolved=set(source_missing) | {x["security_id"] for x in source_bad}
+    if len(source_rows)!=EXPECTED_READY or unresolved!=EXPECTED_UNRESOLVED:
+        raise RuntimeError(f"Fail closed: expected ready={EXPECTED_READY} and frozen unresolved IDs; got ready={len(source_rows)} unresolved={sorted(unresolved)}")
     if not a.apply:
-        print("AUDIT PASS: zero canonical writes",flush=True); return
+        print(f"AUDIT PASS: ready={len(source_rows)} frozen_unresolved={len(unresolved)} zero canonical writes",flush=True); return
 
     changed=0
-    for n,sid in enumerate(sorted(targets),1):
+    apply_targets=sorted(source_rows)
+    for n,sid in enumerate(apply_targets,1):
         key=HISTORY_PREFIX+sid+".parquet"; backup=BACKUP_PREFIX+sid+".parquet"
         raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
         if not exists(s3,bucket,backup):
@@ -98,12 +102,13 @@ def main():
         merged=pd.concat([hist.loc[hist["date"]!=TARGET,OHLCV_COLUMNS],source_rows[sid]],ignore_index=True)
         merged=merged.drop_duplicates("date",keep="last").sort_values("date").reset_index(drop=True)
         put_parquet(s3,bucket,key,merged); changed+=1
-        if n%100==0 or n==len(targets): print(f"[apply] {n}/{len(targets)}",flush=True)
+        if n%100==0 or n==len(apply_targets): print(f"[apply] {n}/{len(apply_targets)}",flush=True)
 
     summary["changed"]=changed
+    summary["skipped_unresolved"]=sorted(unresolved)
     report_key=REPORT_PREFIX+"apply.json"
     s3.put_object(Bucket=bucket,Key=report_key,Body=json.dumps(summary,indent=2).encode(),ContentType="application/json")
     print("SEP22_STOOQ_APPLY="+json.dumps(summary,sort_keys=True),flush=True)
-    if changed!=EXPECTED: raise RuntimeError(f"Apply incomplete: {changed}/{EXPECTED}")
+    if changed!=EXPECTED_READY: raise RuntimeError(f"Apply incomplete: {changed}/{EXPECTED_READY}")
 
 if __name__=="__main__": main()
