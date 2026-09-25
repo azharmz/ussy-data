@@ -1,0 +1,75 @@
+name: training-cwh-3y-scan-one-shot
+on:
+  push:
+    paths:
+      - ".github/dispatch/training-cwh-3y-scan"
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ussy-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -q boto3 pandas pyarrow
+          git clone -q https://github.com/azharmz/ussy-oneil-patterns.git /tmp/oneil
+          cd /tmp/oneil
+          git checkout -q c433cc1e35a5aa32a46f732cd8c5545935e36e40
+          pip install -q -e .
+      - name: Scan canonical 3y history for recognized CWH
+        run: |
+          cat > /tmp/scan.py <<'PY'
+          import os, io, json, boto3, pandas as pd
+          from oneil_patterns.validation.canonical_predictions import extract_core_morphology_predictions
+          s3=boto3.client("s3",endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+            aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],region_name="auto")
+          b=os.environ["R2_BUCKET"]
+          paginator=s3.get_paginator("list_objects_v2")
+          keys=[]
+          for page in paginator.paginate(Bucket=b,Prefix="history/ohlcv/"):
+            keys += [x["Key"] for x in page.get("Contents",[]) if x["Key"].endswith(".parquet")]
+          out=[]; errors=[]
+          for n,k in enumerate(keys,1):
+            sid=k.rsplit("/",1)[-1][:-8]
+            try:
+              raw=s3.get_object(Bucket=b,Key=k)["Body"].read()
+              df=pd.read_parquet(io.BytesIO(raw))
+              df["date"]=pd.to_datetime(df["date"])
+              end=df["date"].max()
+              df=df[df["date"] >= end-pd.Timedelta(days=1096)].copy()
+              if len(df)<30: continue
+              preds=extract_core_morphology_predictions(df,asof_date=end.date())
+              for p in preds:
+                d=p.__dict__ if hasattr(p,"__dict__") else {f:getattr(p,f) for f in p.__dataclass_fields__}
+                if d.get("pattern")=="CUP_WITH_HANDLE" and "RECOGNIZED" in str(d.get("detector_status","")):
+                  out.append({"security_id":sid,**{q:(v.isoformat() if hasattr(v,"isoformat") else v) for q,v in d.items()}})
+            except Exception as e: errors.append({"security_id":sid,"error":str(e)[:300]})
+            if n%100==0: print(f"SCAN {n}/{len(keys)} recognized={len(out)} errors={len(errors)}",flush=True)
+          # Resolve ticker from current universe snapshots if possible.
+          sid_to_ticker={}
+          try:
+            ptr=json.loads(s3.get_object(Bucket=b,Key="universe/current.json")["Body"].read())
+            sd=ptr.get("snapshot_date") or ptr.get("date")
+            mem=json.loads(s3.get_object(Bucket=b,Key=f"universe/membership/{sd}.json")["Body"].read())
+            rows=mem if isinstance(mem,list) else mem.get("members") or mem.get("securities") or mem.get("rows") or []
+            for r in rows:
+              if isinstance(r,dict) and r.get("security_id"): sid_to_ticker[r["security_id"]]=r.get("ticker") or r.get("symbol")
+          except Exception as e: print("TICKER_MAP_WARN",e)
+          for r in out: r["ticker"]=sid_to_ticker.get(r["security_id"])
+          open("cwh-3y-scan.json","w").write(json.dumps({"history_files":len(keys),"recognized_count":len(out),"errors":errors,"results":out},indent=2,default=str))
+          print(json.dumps({"history_files":len(keys),"recognized_count":len(out),"errors":len(errors),"sample":out[:10]},default=str))
+          PY
+          PYTHONPATH=/tmp/oneil/src python /tmp/scan.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cwh-3y-scan
+          path: cwh-3y-scan.json
