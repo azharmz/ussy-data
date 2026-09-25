@@ -54,6 +54,7 @@ def main():
         keys += [x["Key"] for x in page.get("Contents",[]) if x["Key"].endswith(".parquet")]
         if not page.get("IsTruncated"): break
         token=page["NextContinuationToken"]
+    print(f"[scan] canonical history objects={len(keys)}",flush=True)
 
     targets=[]; source_missing=[]; source_bad=[]; source_rows={}
     for n,key in enumerate(keys,1):
@@ -76,6 +77,8 @@ def main():
         if bad:
             source_bad.append({"security_id":sid,"reason":";".join(bad)}); continue
         source_rows[sid]=row[OHLCV_COLUMNS].copy()
+        if n%50==0 or n==len(keys):
+            print(f"[audit] scanned={n}/{len(keys)} targets={len(targets)} stooq_ready={len(source_rows)} missing={len(source_missing)} bad={len(source_bad)}",flush=True)
 
     summary={"created_at":datetime.now(UTC).isoformat(),"mode":"APPLY" if a.apply else "AUDIT",
       "target_date":"2026-09-22","daily_safe_count":len(safe),"bracketed_target_count":len(targets),
