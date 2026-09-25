@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/repair-sep22-stooq.yml"
+      - "src/repair_sep22_from_stooq.py"
 
 permissions:
   contents: read
