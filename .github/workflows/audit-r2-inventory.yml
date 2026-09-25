@@ -32,9 +32,10 @@ jobs:
       - name: Inspect production daily 2026-09-22 (read-only)
         run: |
           python - <<'PY'
-          import io, os, json
+          import io, os, json, sys
+          sys.path.insert(0, "src")
           import pandas as pd
-          from src.bootstrap_ohlcv import make_s3_client
+          from bootstrap_ohlcv import make_s3_client
 
           key = "production/daily/2026-09-22.parquet"
           s3 = make_s3_client()
@@ -69,7 +70,8 @@ jobs:
       - name: Check 17 unresolved Stooq securities in canonical history (read-only)
         run: |
           python - <<'PY'
-          import json, os
+          import json, os, sys
+          sys.path.insert(0, "src")
           from botocore.exceptions import ClientError
           from src.bootstrap_ohlcv import make_s3_client
           targets = [
