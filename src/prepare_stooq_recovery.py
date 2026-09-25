@@ -58,7 +58,7 @@ def main():
     need={"security_id","ticker","status"}
     if not need.issubset(m.columns): raise ValueError(f"manifest missing {sorted(need-set(m.columns))}")
     copied=m[m["status"].astype(str).str.upper()=="COPIED"].copy()
-    filename_col=next((c for c in ["destination_filename","filename","stooq_filename","matched_filename"] if c in copied.columns),None)
+    filename_col=next((c for c in ["stooq_filename","destination_filename","filename","matched_filename"] if c in copied.columns),None)
     if not filename_col: raise ValueError("manifest needs destination_filename/filename/stooq_filename/matched_filename")
     results=[]
     for i,row in enumerate(copied.itertuples(index=False),1):
@@ -68,11 +68,11 @@ def main():
             frame=read_stooq(src,sid,ticker)
             dst=a.output_dir/f"{sid}.parquet"
             frame.to_parquet(dst,index=False,compression="zstd")
-            results.append({"security_id":sid,"ticker":ticker,"source_file":fn,"status":"STAGED","rows":len(frame),"first_date":frame.date.iloc[0].date().isoformat(),"last_date":frame.date.iloc[-1].date().isoformat(),"source_sha256":sha256(src),"candidate_sha256":sha256(dst)})
+            results.append({"security_id":sid,"ticker":ticker,"source_file":fn,"status":"STAGED","rows":len(frame),"first_date":frame.date.iloc[0].date().isoformat(),"last_date":frame.date.iloc[-1].date().isoformat(),"source_sha256":sha256(src),"candidate_sha256":sha256(dst),"rejected_bar_count":len(rejected_bars),"rejected_bars":rejected_bars})
         except Exception as e:
             results.append({"security_id":sid,"ticker":ticker,"source_file":fn,"status":"REJECTED","error":str(e)[:500]})
         if i%100==0: print(f"progress={i}/{len(copied)}")
-    report={"schema_version":1,"created_at":datetime.now(UTC).isoformat(),"mode":"STAGING_ONLY_NO_R2_WRITES","price_contract":{"stooq_ohlc":"preserved","adj_close":"stooq_close","warning":"Recovery snapshot basis; not asserted to be raw exchange OHLC."},"expected":len(copied),"staged":sum(x["status"]=="STAGED" for x in results),"rejected":sum(x["status"]=="REJECTED" for x in results),"results":results}
+    report={"schema_version":1,"created_at":datetime.now(UTC).isoformat(),"mode":"STAGING_ONLY_NO_R2_WRITES","price_contract":{"stooq_ohlc":"preserved","adj_close":"stooq_close","warning":"Recovery snapshot basis; not asserted to be raw exchange OHLC."},"expected":len(copied),"staged":sum(x["status"]=="STAGED" for x in results),"rejected":sum(x["status"]=="REJECTED" for x in results),"quarantined_bars":sum(x.get("rejected_bar_count",0) for x in results),"results":results}
     (a.output_dir/"stooq-recovery-report.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
     print(json.dumps({k:report[k] for k in ["expected","staged","rejected"]}))
 
