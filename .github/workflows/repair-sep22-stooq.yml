@@ -4,13 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: AUDIT first; APPLY only after audit reports exactly 1066/1066
+        description: AUDIT or APPLY
         required: true
         type: choice
         options:
           - AUDIT
           - APPLY
         default: AUDIT
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/repair-sep22-stooq.yml"
 
 permissions:
   contents: read
@@ -38,7 +42,7 @@ jobs:
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Audit exact incident population and Stooq coverage
-        if: inputs.mode == 'AUDIT'
+        if: github.event_name == 'push' || inputs.mode == 'AUDIT'
         run: python src/repair_sep22_from_stooq.py
       - name: Replace exactly 1066 Sep-22 bars from verified Stooq staging
         if: inputs.mode == 'APPLY'
