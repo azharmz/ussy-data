@@ -45,5 +45,5 @@ jobs:
       - name: Audit exact incident population and Stooq coverage
         run: python src/repair_sep22_from_stooq.py
       - name: Replace 1061 verified Sep-22 bars from Stooq staging
-        if: (github.event_name == 'push' && (github.event.head_commit.message == 'apply frozen Sep22 Stooq repair' || github.event.head_commit.message == 'resume frozen Sep22 Stooq repair')) || inputs.mode == 'APPLY'
+        if: (github.event_name == 'push' && (github.event.head_commit.message == 'apply frozen Sep22 Stooq repair' || github.event.head_commit.message == 'resume frozen Sep22 Stooq repair' || github.event.head_commit.message == 'resume Sep22 repair from durable checkpoints')) || inputs.mode == 'APPLY'
         run: python src/repair_sep22_from_stooq.py --apply
