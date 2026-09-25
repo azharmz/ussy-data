@@ -74,6 +74,13 @@ def main():
       "expected_target_count":EXPECTED,"stooq_ready":len(source_rows),"stooq_missing":len(source_missing),
       "stooq_bad":len(source_bad)}
     print("SEP22_STOOQ_AUDIT="+json.dumps(summary,sort_keys=True),flush=True)
+    manifest={"created_at":summary["created_at"],"target_date":"2026-09-22",
+      "population_source":ready_meta["parquet_key"],"targets":targets,
+      "stooq_ready":sorted(source_rows),"stooq_missing":source_missing,"stooq_bad":source_bad}
+    manifest_key=REPORT_PREFIX+"manifest.json"
+    s3.put_object(Bucket=bucket,Key=manifest_key,Body=json.dumps(manifest,indent=2,sort_keys=True).encode(),ContentType="application/json")
+    print("SEP22_STOOQ_UNRESOLVED="+json.dumps({"missing":source_missing,"bad":source_bad},sort_keys=True),flush=True)
+    print(f"[manifest] r2://{bucket}/{manifest_key} targets={len(targets)} ready={len(source_rows)} unresolved={len(source_missing)+len(source_bad)}",flush=True)
     if len(targets)!=EXPECTED:
         raise RuntimeError(f"Fail closed: incident population expected {EXPECTED}, got {len(targets)}")
     if source_missing or source_bad or len(source_rows)!=EXPECTED:
