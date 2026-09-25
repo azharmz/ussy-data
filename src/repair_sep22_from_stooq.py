@@ -40,50 +40,39 @@ def main():
     p.add_argument("--apply",action="store_true")
     a=p.parse_args()
     s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
-    daily=get_parquet(s3,bucket,DAILY_KEY)
-    safe=set(daily["security_id"].astype(str))
-    if len(safe)!=107:
-        raise RuntimeError(f"Fail closed: expected 107 original Sep-22 daily rows, got {len(safe)}")
+    # Reproduce the original 1,066 incident population exactly: it was derived
+    # from the READY snapshot current at the time, not from all canonical histories.
+    ready_meta=json.loads(s3.get_object(Bucket=bucket,Key="production/ready/current.json")["Body"].read())
+    ready=get_parquet(s3,bucket,ready_meta["parquet_key"])
+    ready["date"]=pd.to_datetime(ready["date"],errors="coerce").dt.normalize()
+    ids=sorted((set(ready.loc[ready.date<TARGET,"security_id"].astype(str)) &
+                set(ready.loc[ready.date>TARGET,"security_id"].astype(str))) -
+               set(ready.loc[ready.date==TARGET,"security_id"].astype(str)))
+    targets=ids
+    print(f"[population] ready_key={ready_meta['parquet_key']} targets={len(targets)}",flush=True)
 
-    # Scan only canonical history objects. Pagination is required above 1000.
-    keys=[]; token=None
-    while True:
-        kw={"Bucket":bucket,"Prefix":HISTORY_PREFIX}
-        if token: kw["ContinuationToken"]=token
-        page=s3.list_objects_v2(**kw)
-        keys += [x["Key"] for x in page.get("Contents",[]) if x["Key"].endswith(".parquet")]
-        if not page.get("IsTruncated"): break
-        token=page["NextContinuationToken"]
-    print(f"[scan] canonical history objects={len(keys)}",flush=True)
-
-    targets=[]; source_missing=[]; source_bad=[]; source_rows={}
-    for n,key in enumerate(keys,1):
-        sid=key[len(HISTORY_PREFIX):-8]
-        hist=get_parquet(s3,bucket,key)
-        dates=pd.to_datetime(hist["date"],errors="coerce").dt.normalize()
-        if not ((dates<TARGET).any() and (dates>TARGET).any()) or sid in safe:
-            continue
-        targets.append(sid)
+    source_missing=[]; source_bad=[]; source_rows={}
+    for n,sid in enumerate(targets,1):
         skey=STOOQ_PREFIX+sid+".parquet"
         if not exists(s3,bucket,skey):
-            source_missing.append(sid); continue
-        src=get_parquet(s3,bucket,skey)
-        sd=pd.to_datetime(src["date"],errors="coerce").dt.normalize()
-        row=src.loc[sd==TARGET]
-        if len(row)!=1:
-            source_bad.append({"security_id":sid,"reason":f"target_rows={len(row)}"}); continue
-        r=row.iloc[0]
-        bad=issues(r)
-        if bad:
-            source_bad.append({"security_id":sid,"reason":";".join(bad)}); continue
-        source_rows[sid]=row[OHLCV_COLUMNS].copy()
-        if n%50==0 or n==len(keys):
-            print(f"[audit] scanned={n}/{len(keys)} targets={len(targets)} stooq_ready={len(source_rows)} missing={len(source_missing)} bad={len(source_bad)}",flush=True)
+            source_missing.append(sid)
+        else:
+            src=get_parquet(s3,bucket,skey)
+            sd=pd.to_datetime(src["date"],errors="coerce").dt.normalize()
+            row=src.loc[sd==TARGET]
+            if len(row)!=1:
+                source_bad.append({"security_id":sid,"reason":f"target_rows={len(row)}"})
+            else:
+                bad=issues(row.iloc[0])
+                if bad: source_bad.append({"security_id":sid,"reason":";".join(bad)})
+                else: source_rows[sid]=row[OHLCV_COLUMNS].copy()
+        if n%50==0 or n==len(targets):
+            print(f"[stooq] checked={n}/{len(targets)} ready={len(source_rows)} missing={len(source_missing)} bad={len(source_bad)}",flush=True)
 
     summary={"created_at":datetime.now(UTC).isoformat(),"mode":"APPLY" if a.apply else "AUDIT",
-      "target_date":"2026-09-22","daily_safe_count":len(safe),"bracketed_target_count":len(targets),
+      "target_date":"2026-09-22","population_source":ready_meta["parquet_key"],"incident_target_count":len(targets),
       "expected_target_count":EXPECTED,"stooq_ready":len(source_rows),"stooq_missing":len(source_missing),
-      "stooq_bad":len(source_bad),"canonical_history_objects":len(keys)}
+      "stooq_bad":len(source_bad)}
     print("SEP22_STOOQ_AUDIT="+json.dumps(summary,sort_keys=True),flush=True)
     if len(targets)!=EXPECTED:
         raise RuntimeError(f"Fail closed: incident population expected {EXPECTED}, got {len(targets)}")
