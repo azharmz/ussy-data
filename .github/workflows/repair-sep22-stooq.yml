@@ -43,8 +43,7 @@ jobs:
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Audit exact incident population and Stooq coverage
-        if: github.event_name == 'push' || inputs.mode == 'AUDIT'
         run: python src/repair_sep22_from_stooq.py
-      - name: Replace exactly 1066 Sep-22 bars from verified Stooq staging
-        if: inputs.mode == 'APPLY'
+      - name: Replace 1061 verified Sep-22 bars from Stooq staging
+        if: (github.event_name == 'push' && github.event.head_commit.message == 'apply frozen Sep22 Stooq repair') || inputs.mode == 'APPLY'
         run: python src/repair_sep22_from_stooq.py --apply
