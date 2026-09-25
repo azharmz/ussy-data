@@ -91,24 +91,32 @@ def main():
     if not a.apply:
         print(f"AUDIT PASS: ready={len(source_rows)} frozen_unresolved={len(unresolved)} zero canonical writes",flush=True); return
 
-    changed=0
+    changed=0; already_correct=0
     apply_targets=sorted(source_rows)
     for n,sid in enumerate(apply_targets,1):
         key=HISTORY_PREFIX+sid+".parquet"; backup=BACKUP_PREFIX+sid+".parquet"
         raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
-        if not exists(s3,bucket,backup):
-            s3.put_object(Bucket=bucket,Key=backup,Body=raw,ContentType="application/vnd.apache.parquet")
         hist=pd.read_parquet(io.BytesIO(raw)); hist["date"]=pd.to_datetime(hist["date"]).dt.normalize()
-        merged=pd.concat([hist.loc[hist["date"]!=TARGET,OHLCV_COLUMNS],source_rows[sid]],ignore_index=True)
-        merged=merged.drop_duplicates("date",keep="last").sort_values("date").reset_index(drop=True)
-        put_parquet(s3,bucket,key,merged); changed+=1
-        if n%100==0 or n==len(apply_targets): print(f"[apply] {n}/{len(apply_targets)}",flush=True)
+        current=hist.loc[hist["date"]==TARGET,OHLCV_COLUMNS].reset_index(drop=True)
+        desired=source_rows[sid][OHLCV_COLUMNS].reset_index(drop=True)
+        if len(current)==1 and current.equals(desired):
+            already_correct+=1
+        else:
+            if not exists(s3,bucket,backup):
+                s3.put_object(Bucket=bucket,Key=backup,Body=raw,ContentType="application/vnd.apache.parquet")
+            merged=pd.concat([hist.loc[hist["date"]!=TARGET,OHLCV_COLUMNS],desired],ignore_index=True)
+            merged=merged.drop_duplicates("date",keep="last").sort_values("date").reset_index(drop=True)
+            put_parquet(s3,bucket,key,merged); changed+=1
+        if n%50==0 or n==len(apply_targets):
+            print(f"[apply] checked={n}/{len(apply_targets)} changed={changed} already_correct={already_correct}",flush=True)
 
-    summary["changed"]=changed
+    summary["changed_this_run"]=changed
+    summary["already_correct"]=already_correct
+    summary["verified_total"]=changed+already_correct
     summary["skipped_unresolved"]=sorted(unresolved)
     report_key=REPORT_PREFIX+"apply.json"
     s3.put_object(Bucket=bucket,Key=report_key,Body=json.dumps(summary,indent=2).encode(),ContentType="application/json")
     print("SEP22_STOOQ_APPLY="+json.dumps(summary,sort_keys=True),flush=True)
-    if changed!=EXPECTED_READY: raise RuntimeError(f"Apply incomplete: {changed}/{EXPECTED_READY}")
+    if changed+already_correct!=EXPECTED_READY: raise RuntimeError(f"Apply incomplete: verified={changed+already_correct}/{EXPECTED_READY}")
 
 if __name__=="__main__": main()
