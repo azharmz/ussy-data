@@ -96,4 +96,30 @@ jobs:
                   else:
                       raise
           print("STOOQ_17_CANONICAL_HISTORY="+json.dumps({"exists":sum(r["exists"] for r in rows),"missing":sum(not r["exists"] for r in rows),"rows":rows},sort_keys=True),flush=True)
+
+          # Export compact OHLC fingerprints for local Stooq identity matching.
+          import io
+          import pandas as pd
+          fingerprints = []
+          for sid,ticker in targets:
+              key=f"history/ohlcv/{sid}.parquet"
+              raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+              df=pd.read_parquet(io.BytesIO(raw))
+              keep=[x for x in ["date","open","high","low","close","volume"] if x in df.columns]
+              x=df[keep].copy()
+              if "date" in x.columns:
+                  x["date"]=pd.to_datetime(x["date"]).dt.strftime("%Y-%m-%d")
+              x=x.tail(40)
+              fingerprints.append({"security_id":sid,"ticker":ticker,"bars":x.to_dict(orient="records")})
+          os.makedirs("diagnostics",exist_ok=True)
+          with open("diagnostics/stooq-17-fingerprints.json","w",encoding="utf-8") as fh:
+              json.dump({"schema_version":1,"source":"canonical history/ohlcv","records":fingerprints},fh,indent=2,default=str)
+          print("STOOQ_17_FINGERPRINTS=diagnostics/stooq-17-fingerprints.json",flush=True)
           PY
+
+      - name: Upload 17-security fingerprints
+        uses: actions/upload-artifact@v4
+        with:
+          name: stooq-17-fingerprints
+          path: diagnostics/stooq-17-fingerprints.json
+          if-no-files-found: error
