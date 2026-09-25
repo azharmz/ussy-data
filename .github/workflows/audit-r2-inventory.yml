@@ -65,3 +65,33 @@ jobs:
           }
           print("DAILY_2026_09_22_AUDIT="+json.dumps(report,default=str,sort_keys=True),flush=True)
           PY
+
+      - name: Check 17 unresolved Stooq securities in canonical history (read-only)
+        run: |
+          python - <<'PY'
+          import json, os
+          from botocore.exceptions import ClientError
+          from src.bootstrap_ohlcv import make_s3_client
+          targets = [
+              ("US45828L1089","IAS"),("US6793691089","OLPX"),("US05350V1061","AVNS"),
+              ("US87427V1035","TALK"),("VGG205281089","MCTA"),("US45769N1054","ISSC"),
+              ("US2274831047","CCRN"),("IL0010828585","WILC"),("KYG712641086","PLTS"),
+              ("KYG3139J1094","EFTY"),("US4628371050","UCFI"),("KYG57Y0E1004","MAGH"),
+              ("VGG6053R1064","MAMK"),("KYG722282012","PC"),("US68840D1028","OSRH"),
+              ("US37892C1062","GGRP"),("US0554742090","SLAI"),
+          ]
+          s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
+          rows=[]
+          for sid,ticker in targets:
+              key=f"history/ohlcv/{sid}.parquet"
+              try:
+                  h=s3.head_object(Bucket=bucket,Key=key)
+                  rows.append({"ticker":ticker,"security_id":sid,"exists":True,"key":key,"bytes":int(h.get("ContentLength",0))})
+              except ClientError as e:
+                  code=str(e.response.get("Error",{}).get("Code",""))
+                  if code in {"404","NoSuchKey","NotFound"}:
+                      rows.append({"ticker":ticker,"security_id":sid,"exists":False,"key":key})
+                  else:
+                      raise
+          print("STOOQ_17_CANONICAL_HISTORY="+json.dumps({"exists":sum(r["exists"] for r in rows),"missing":sum(not r["exists"] for r in rows),"rows":rows},sort_keys=True),flush=True)
+          PY
