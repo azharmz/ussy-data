@@ -28,14 +28,3 @@ jobs:
         run: python src/publish_ema_state.py
       - name: Verify all rebuilt EMA and promote
         run: python src/verify_ema_equivalence.py --sample-size 50
-  downstream:
-    needs: ema
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with: {python-version: "3.12", cache: pip}
-      - run: python -m pip install --disable-pip-version-check -r requirements.txt
-      - run: python src/audit_screening_freshness.py --snapshot-date current
-      - run: python src/production_completion.py --write
