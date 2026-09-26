@@ -21,8 +21,7 @@ class StooqRecoveryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "x.us.txt"
             p.write_text("<DATE>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>\n20260922,10,9,8,10,1\n")
-            frame = read_stooq(p, "X", "X")
-            self.assertEqual(len(frame.attrs.get("rejected_bars", [])), 1)
+            with self.assertRaisesRegex(ValueError, "OHLCV QC rejected 1 bars"):\n                read_stooq(p, "X", "X")
 
 
 if __name__ == "__main__":
