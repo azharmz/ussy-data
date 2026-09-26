@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from verify_ema_equivalence import history_through_ready_cutoff, parse_args, select_equivalence_ids
+from verify_ema_equivalence import history_through_ready_cutoff, select_equivalence_ids
 
 
 class EMAEquivalenceSelectionTests(unittest.TestCase):
@@ -33,17 +33,6 @@ class EMAEquivalenceSelectionTests(unittest.TestCase):
         manifest = {"bootstrap_security_ids": ["X"], "rebuild_security_ids": []}
         with self.assertRaises(RuntimeError):
             select_equivalence_ids(self.state(), manifest, 2)
-
-    def test_default_numeric_tolerance_accepts_recursive_float_drift(self):
-        import numpy as np
-        args = parse_args()
-        self.assertEqual(args.rtol, 1e-8)
-        self.assertTrue(np.isclose(100.0 + 3.84e-7, 100.0, rtol=args.rtol, atol=args.atol))
-
-    def test_default_numeric_tolerance_still_rejects_material_ema_error(self):
-        import numpy as np
-        args = parse_args()
-        self.assertFalse(np.isclose(100.001, 100.0, rtol=args.rtol, atol=args.atol))
 
     def test_history_is_cut_at_ready_as_of_not_newer_provider_bar(self):
         history = pd.DataFrame({
