@@ -1,0 +1,29 @@
+name: Sep22 missing123 Yahoo audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/audit_sep22_missing123_yahoo.py"
+      - ".github/workflows/audit-sep22-missing123-yahoo.yml"
+permissions:
+  contents: read
+env:
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+  PYTHONUNBUFFERED: "1"
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Query 123 missing securities directly from raw Yahoo
+        run: python src/audit_sep22_missing123_yahoo.py
