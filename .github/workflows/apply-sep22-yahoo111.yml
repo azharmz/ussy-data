@@ -1,0 +1,27 @@
+name: Apply Sep22 Yahoo 111 backfill
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/apply_sep22_missing111_yahoo.py"
+permissions:
+  contents: read
+env:
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+  PYTHONUNBUFFERED: "1"
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Apply exact 111 raw Yahoo Sep22 bars and verify
+        run: python src/apply_sep22_missing111_yahoo.py
