@@ -37,3 +37,15 @@ def acquisition_allowed(security_id: str, as_of: date) -> bool:
 
 def exclusion_record(security_id: str, as_of: date):
     return None if acquisition_allowed(security_id, as_of) else records()[str(security_id)]
+
+
+def acquisition_ticker(security_id: str, ticker: str, as_of: date) -> str:
+    """Resolve a verified same-security ticker transition without changing security_id."""
+    record = records().get(str(security_id))
+    if record is None or record.get("lifecycle_status") != "VERIFIED_TICKER_CHANGE_SAME_SECURITY":
+        return ticker
+    effective = record.get("effective_date")
+    successor = str(record.get("successor_ticker") or "").strip()
+    if not effective or not successor or as_of < date.fromisoformat(effective):
+        return ticker
+    return successor

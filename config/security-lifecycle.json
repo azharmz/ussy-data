@@ -1,8 +1,20 @@
 {
   "schema_version": 1,
-  "as_of_date": "2026-09-18",
+  "as_of_date": "2026-09-27",
   "description": "Reviewed security lifecycle and onboarding dispositions. Canonical key is security_id. Source universe membership/compliance is not changed by this registry.",
   "records": [
+    {
+      "security_id": "CA98942X1024",
+      "ticker": "ZTEK",
+      "lifecycle_status": "VERIFIED_NONTRADABLE_PRIMARY_EXCHANGE",
+      "effective_date": "2026-09-02",
+      "reason": "Nasdaq suspension / OTC transition",
+      "detail": "Nasdaq trading suspended; same shares continue TSXV:ZEN and OTCQX:ZTEKF. Do not acquire stale Nasdaq ticker ZTEK.",
+      "evidence_source": "https://www.nasdaq.com/press-release/zentek-provides-update-nasdaq-listing-2026-08-28",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null,
+      "successor_ticker": "ZTEKF"
+    },
     {
       "security_id": "IE00BDGMC594",
       "ticker": "AVDL",
@@ -23,6 +35,17 @@
       "detail": "Matrix IT; perdagangan terakhir 23 Februari.",
       "evidence_source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-102",
       "reviewed_at": "2026-09-18",
+      "successor_security_id": null
+    },
+    {
+      "security_id": "IL0010828585",
+      "ticker": "WILC",
+      "lifecycle_status": "VERIFIED_NONTRADABLE_PRIMARY_EXCHANGE",
+      "effective_date": "2026-08-27",
+      "reason": "Voluntary Nasdaq delisting",
+      "detail": "US primary-exchange acquisition stops after Nasdaq trading ended; company continues on TASE.",
+      "evidence_source": "https://www.sec.gov/Archives/edgar/data/1030997/000117891326003794/exhibit_99-1.htm",
+      "reviewed_at": "2026-09-27",
       "successor_security_id": null
     },
     {
@@ -114,6 +137,28 @@
       "successor_security_id": null
     },
     {
+      "security_id": "US05350V1061",
+      "ticker": "AVNS",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2026-07-27",
+      "reason": "Acquisition completed",
+      "detail": "Avanos Medical acquired by AIP; public listing terminated.",
+      "evidence_source": "docs/security-lifecycle-audit.md",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null
+    },
+    {
+      "security_id": "US0554742090",
+      "ticker": "SLAI",
+      "lifecycle_status": "VERIFIED_NONTRADABLE_PRIMARY_EXCHANGE",
+      "effective_date": "2026-07-06",
+      "reason": "ADS ratio change followed by NYSE suspension",
+      "detail": "Canonical ID is the pre-1:7 ADS-ratio instrument; ADS ratio changed effective July 6 (new ISIN/CUSIP), then NYSE suspended SLAI July 16. Do not expect Sep-22 bar under this security_id.",
+      "evidence_source": "https://www.sec.gov/Archives/edgar/data/1517496/000110465926075387/tm2618157d1_ex99-1.htm",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": "US0554743080"
+    },
+    {
       "security_id": "US1270971039",
       "ticker": "CTRA",
       "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
@@ -136,6 +181,17 @@
       "successor_security_id": null
     },
     {
+      "security_id": "US2274831047",
+      "ticker": "CCRN",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2026-07-21",
+      "reason": "Merger completed",
+      "detail": "Last trading date July 20; merger closed before market open July 21; suspension effective July 22.",
+      "evidence_source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-513",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null
+    },
+    {
       "security_id": "US30063P1057",
       "ticker": "EXAS",
       "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
@@ -147,6 +203,18 @@
       "successor_security_id": null
     },
     {
+      "security_id": "US37892C1062",
+      "ticker": "GGRP",
+      "lifecycle_status": "VERIFIED_TICKER_CHANGE_SAME_SECURITY",
+      "effective_date": "2026-08-20",
+      "reason": "Corporate rebrand / ticker change",
+      "detail": "The Glimpse Group became Brightline Interactive. SEC filing states CUSIP unchanged; preserve security_id and acquire as BTLN from effective date.",
+      "evidence_source": "https://www.sec.gov/Archives/edgar/data/1854445/000149315226039128/form8-k.htm",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": "US37892C1062",
+      "successor_ticker": "BTLN"
+    },
+    {
       "security_id": "US4364401012",
       "ticker": "HOLX",
       "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
@@ -156,6 +224,41 @@
       "evidence_source": "https://www.hologic.com/acquisition",
       "reviewed_at": "2026-09-18",
       "successor_security_id": null
+    },
+    {
+      "security_id": "US45769N1054",
+      "ticker": "ISSC",
+      "lifecycle_status": "VERIFIED_TICKER_CHANGE_SAME_SECURITY",
+      "effective_date": "2026-08-18",
+      "reason": "Corporate rebrand / ticker change",
+      "detail": "Innovative Aerosystems changed Nasdaq symbol ISSC to IA; preserve security_id and acquire as IA from effective date.",
+      "evidence_source": "https://presscenter.iascorp.com/press-releases/news-details/2026/Innovative-Aerosystems-to-Change-Nasdaq-Ticker-Symbol-to-IA-Following-Corporate-Rebranding/default.aspx",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": "US45769N1054",
+      "successor_ticker": "IA"
+    },
+    {
+      "security_id": "US45828L1089",
+      "ticker": "IAS",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2025-12-23",
+      "reason": "Acquisition completed",
+      "detail": "Integral Ad Science acquired by Novacap and became private.",
+      "evidence_source": "https://integralads.com/news/ias-priorities-in-2026/",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null
+    },
+    {
+      "security_id": "US46658E1073",
+      "ticker": "JFB",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2026-09-04",
+      "reason": "Business combination completed",
+      "detail": "JFB shares ceased Nasdaq trading after Sep 3. Combined company XTEND AI Robotics began NYSE trading as XTND Sep 4; not a simple same-security ticker alias.",
+      "evidence_source": "https://www.sec.gov/Archives/edgar/data/2111860/000119312526381857/d230933d8k12b.htm",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null,
+      "successor_ticker": "XTND"
     },
     {
       "security_id": "US5684271084",
@@ -210,6 +313,17 @@
       "detail": "Nasdaq trading suspended 2026-03-06; OTC symbol CIMG. No automatic venue migration.",
       "evidence_source": "https://www.sec.gov/Archives/edgar/data/1527613/000149315226009365/form8-k.htm",
       "reviewed_at": "2026-09-02",
+      "successor_security_id": null
+    },
+    {
+      "security_id": "US6793691089",
+      "ticker": "OLPX",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2026-07-07",
+      "reason": "Merger completed",
+      "detail": "Henkel merger closed before market open July 7; last trading date July 6.",
+      "evidence_source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-467",
+      "reviewed_at": "2026-09-27",
       "successor_security_id": null
     },
     {
@@ -279,6 +393,17 @@
       "successor_security_id": null
     },
     {
+      "security_id": "US87427V1035",
+      "ticker": "TALK",
+      "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
+      "effective_date": "2026-08-17",
+      "reason": "Merger completed",
+      "detail": "UHS merger closed before market open Aug 17; last trading date Aug 14.",
+      "evidence_source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-570",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": null
+    },
+    {
       "security_id": "US88362T1034",
       "ticker": "THR",
       "lifecycle_status": "VERIFIED_TERMINATED_PUBLIC_LISTING",
@@ -343,6 +468,18 @@
       "evidence_source": "docs/security-lifecycle-audit.md",
       "reviewed_at": "2026-09-18",
       "successor_security_id": null
+    },
+    {
+      "security_id": "VGG9888Q1110",
+      "ticker": "YYGH",
+      "lifecycle_status": "VERIFIED_TICKER_CHANGE_SAME_SECURITY",
+      "effective_date": "2026-09-02",
+      "reason": "Corporate rebrand / ticker change",
+      "detail": "YY Group became YYForce and changed Nasdaq symbol YYGH to YFOR. Filing explicitly states ISIN remains unchanged.",
+      "evidence_source": "https://www.sec.gov/Archives/edgar/data/1985337/000118518526003874/yforex99-2.htm",
+      "reviewed_at": "2026-09-27",
+      "successor_security_id": "VGG9888Q1110",
+      "successor_ticker": "YFOR"
     }
   ]
 }

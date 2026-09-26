@@ -9,7 +9,7 @@ import os
 import random
 import time
 from datetime import UTC, datetime, timedelta
-from security_lifecycle import acquisition_allowed, records as lifecycle_records
+from security_lifecycle import acquisition_allowed, acquisition_ticker, records as lifecycle_records
 from itertools import batched
 from typing import Any
 
@@ -95,7 +95,7 @@ def main():
     parquet_ids={key.removeprefix(HISTORY_PREFIX).removesuffix(".parquet") for key in list_keys(s3,bucket,HISTORY_PREFIX) if key.endswith(".parquet")}; operational_ids=sorted(set(confirmed)&parquet_ids); missing_ids=set(confirmed)-parquet_ids; reviewed_no_retry_ids=sorted(sid for sid in missing_ids if sid in lifecycle_records()); unavailable_ids=sorted(missing_ids-set(reviewed_no_retry_ids)); acquisition_date=datetime.now(UTC).date()
     rolling_frames=[]; new_rows=[]; details=[]; failures=[]; updated_histories=0; histories={}; candidates=[]
     for security_id in operational_ids:
-        record=confirmed[security_id]; ticker=str(record["ticker"]); symbol=yahoo_symbol(ticker,security_id); key=f"{HISTORY_PREFIX}{security_id}.parquet"
+        record=confirmed[security_id]; ticker=str(record["ticker"]); provider_ticker=acquisition_ticker(security_id,ticker,acquisition_date); symbol=yahoo_symbol(provider_ticker,security_id); key=f"{HISTORY_PREFIX}{security_id}.parquet"
         try:
             historical=normalize_existing(read_parquet(s3,bucket,key),security_id,ticker)
             if historical.empty:raise ValueError("Historical Parquet is empty")
