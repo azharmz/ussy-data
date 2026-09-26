@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/audit_sep22_yahoo_raw.py"
+      - "src/audit_sep22_yahoo_raw.py"\n      - "src/compare_sep22_evidence.py"
       - ".github/workflows/audit-sep22-yahoo-raw.yml"
 
 permissions:
@@ -29,5 +29,4 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
-      - name: Re-audit frozen 1066 population against raw Yahoo
-        run: python src/audit_sep22_yahoo_raw.py
+      - name: Re-audit frozen 1066 population against raw Yahoo\n        run: python src/audit_sep22_yahoo_raw.py\n      - name: Compare Stooq recovery with Yahoo raw evidence\n        run: python src/compare_sep22_evidence.py
