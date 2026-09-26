@@ -1,0 +1,41 @@
+name: Recover EMA after Sep22 repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/publish_ema_state.py"
+      - ".github/workflows/recover-ema-sep22.yml"
+permissions:
+  contents: read
+env:
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+  R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+  PYTHONUNBUFFERED: "1"
+jobs:
+  ema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EMA_FORCE_FULL_REBUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12", cache: pip}
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Full rebuild EMA from canonical history at current READY cutoff
+        run: python src/publish_ema_state.py
+      - name: Verify all rebuilt EMA and promote
+        run: python src/verify_ema_equivalence.py --sample-size 50
+  downstream:
+    needs: ema
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12", cache: pip}
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - run: python src/audit_screening_freshness.py --snapshot-date current
+      - run: python src/production_completion.py --write
