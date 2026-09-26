@@ -76,6 +76,9 @@ def main():
     try: previous,_=load_ema_state(s3,bucket)
     except (FileNotFoundError,ValueError): previous=None
     rebuild_hints=_read_rebuild_hints(s3,bucket)
+    if os.getenv("EMA_FORCE_FULL_REBUILD") == "1":
+        rebuild_hints=set(_ready_groups(ready))
+        print(f"EMA candidate: FORCE full-history rebuild for all {len(rebuild_hints)} READY securities",flush=True)
     if rebuild_hints: print(f"EMA candidate: consuming {len(rebuild_hints)} equivalence rebuild hints",flush=True)
     state,counters=build_state(s3,bucket,ready,previous,rebuild_hints); print(f"EMA state built: {len(state)} securities; bootstrap={counters['bootstrap']}, recursive={counters['recursive']}, unchanged={counters['unchanged']}, rebuild={counters['rebuild']}",flush=True)
     buffer=io.BytesIO(); state.to_parquet(buffer,engine="pyarrow",index=False,compression="zstd"); body=buffer.getvalue(); digest=hashlib.sha256(body).hexdigest(); parquet_key,manifest_key=candidate_keys()
