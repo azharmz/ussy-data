@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/apply_sep22_missing111_yahoo.py"
+      - "src/apply_sep22_missing111_yahoo.py"\n      - ".github/workflows/apply-sep22-yahoo111.yml"
 permissions:
   contents: read
 env:
