@@ -34,6 +34,16 @@ class QQQTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Adjustment basis'):
             merge_incremental(self.old, new)
 
+    def test_uniform_dividend_adjustment_restatement_rebases_history(self):
+        new = self.old.copy()
+        new['adj_close'] = new['adj_close'] * 0.99
+        result = merge_incremental(self.old, new)
+        self.pd.testing.assert_series_equal(
+            result['adj_close'].reset_index(drop=True),
+            new['adj_close'].reset_index(drop=True),
+            check_names=False,
+        )
+
     def test_close_revision_stops(self):
         new = self.old.iloc[[1]].copy()
         new['close'] = 100.

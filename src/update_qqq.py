@@ -38,11 +38,22 @@ def merge_incremental(old, new):
     overlap = old.merge(new, on='date', suffixes=('_old', '_new'))
     if overlap.empty:
         raise ValueError('No overlap to verify adjustment continuity')
-    if not np.allclose(overlap.adj_close_old / overlap.close_old,
-                       overlap.adj_close_new / overlap.close_new, rtol=1e-7, atol=1e-9):
-        raise ValueError('Adjustment basis changed; explicit historical revision review required')
+    # Raw closes must remain stable. Yahoo can legitimately restate historical
+    # Adj Close after a dividend; accept only a uniform adjustment-factor shift
+    # across at least two overlap rows, then rebase the older Adj Close history.
     if not np.allclose(overlap.close_old, overlap.close_new, rtol=1e-7, atol=1e-9):
         raise ValueError('Source revised historical closes; review before replacing history')
+    old_ratio = overlap.adj_close_old / overlap.close_old
+    new_ratio = overlap.adj_close_new / overlap.close_new
+    if not np.allclose(old_ratio, new_ratio, rtol=1e-7, atol=1e-9):
+        if len(overlap) < 2:
+            raise ValueError('Adjustment basis changed; explicit historical revision review required')
+        revision_factor = new_ratio / old_ratio
+        if (not np.isfinite(revision_factor).all()
+                or not np.allclose(revision_factor, revision_factor.iloc[0], rtol=1e-7, atol=1e-9)):
+            raise ValueError('Adjustment basis changed; explicit historical revision review required')
+        old = old.copy()
+        old['adj_close'] = old['adj_close'] * float(revision_factor.iloc[0])
     result = pd.concat([old, new], ignore_index=True).drop_duplicates('date', keep='last')
     result = result[COLS].sort_values('date').reset_index(drop=True)
     validate(result)
