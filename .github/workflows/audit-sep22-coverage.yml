@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "src/audit_sep22_canonical_coverage.py"
+      - "src/security_lifecycle.py"
+      - "config/security-lifecycle.json"
       - ".github/workflows/audit-sep22-coverage.yml"
 permissions:
   contents: read
