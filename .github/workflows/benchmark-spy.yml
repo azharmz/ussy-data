@@ -10,6 +10,7 @@ on:
       - '.github/workflows/benchmark-spy.yml'
       - 'src/update_spy.py'
       - 'tests/test_spy.py'
+      - 'tests/test_prepare_stooq_recovery.py'
 permissions:
   contents: read
 concurrency:
