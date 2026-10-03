@@ -95,15 +95,15 @@ def main():
     parquet_ids={key.removeprefix(HISTORY_PREFIX).removesuffix(".parquet") for key in list_keys(s3,bucket,HISTORY_PREFIX) if key.endswith(".parquet")}; operational_ids=sorted(set(confirmed)&parquet_ids); missing_ids=set(confirmed)-parquet_ids; reviewed_no_retry_ids=sorted(sid for sid in missing_ids if sid in lifecycle_records()); unavailable_ids=sorted(missing_ids-set(reviewed_no_retry_ids)); acquisition_date=datetime.now(UTC).date()
     rolling_frames=[]; new_rows=[]; details=[]; failures=[]; updated_histories=0; histories={}; candidates=[]
     for security_id in operational_ids:
-        record=confirmed[security_id]; ticker=str(record["ticker"]); provider_ticker=acquisition_ticker(security_id,ticker,acquisition_date); symbol=yahoo_symbol(provider_ticker,security_id); key=f"{HISTORY_PREFIX}{security_id}.parquet"
+        record=confirmed[security_id]; source_ticker=str(record["ticker"]); provider_ticker=acquisition_ticker(security_id,source_ticker,acquisition_date); symbol=yahoo_symbol(provider_ticker,security_id); key=f"{HISTORY_PREFIX}{security_id}.parquet"
         try:
-            historical=normalize_existing(read_parquet(s3,bucket,key),security_id,ticker)
+            historical=normalize_existing(read_parquet(s3,bucket,key),security_id,provider_ticker)
             if historical.empty:raise ValueError("Historical Parquet is empty")
             histories[security_id]=historical
-            if acquisition_allowed(security_id,acquisition_date): candidates.append((security_id,ticker,symbol,historical["date"].iloc[-1]))
+            if acquisition_allowed(security_id,acquisition_date): candidates.append((security_id,provider_ticker,symbol,historical["date"].iloc[-1]))
             else:
-                rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"lifecycle_excluded"}); LOG.info("Lifecycle-excluded daily acquisition for %s (%s)",ticker,security_id)
-        except Exception as exc:failures.append({"security_id":security_id,"ticker":ticker,"error":str(exc)[:500]}); LOG.error("Failed to load history for %s (%s): %s",ticker,security_id,exc)
+                rolling=historical.tail(args.rolling_bars).copy(); rolling["ticker"]=provider_ticker; rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":provider_ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"lifecycle_excluded"}); LOG.info("Lifecycle-excluded daily acquisition for %s (%s)",provider_ticker,security_id)
+        except Exception as exc:failures.append({"security_id":security_id,"ticker":provider_ticker,"error":str(exc)[:500]}); LOG.error("Failed to load history for %s (%s): %s",provider_ticker,security_id,exc)
     candidate_batches=list(batched(candidates,args.batch_size))
     for batch_index,batch in enumerate(candidate_batches):
         if batch_index and args.request_delay:
@@ -117,9 +117,9 @@ def main():
                 raw=extract_symbol(batch_frame,symbol,len(symbols)); normalized=normalize_with_individual_fallback(raw,symbol,last_date,args.max_retries,security_id,ticker); downloaded=historical.iloc[0:0].copy() if normalized.empty else normalized; merged,additions,backfills=merge_downloaded_history(historical,downloaded,last_date)
                 if not additions.empty or not backfills.empty:
                     write_parquet(s3,bucket,key,merged); historical=merged; histories[security_id]=historical; new_rows.append(pd.concat([backfills,additions],ignore_index=True)[OHLCV_COLUMNS]); updated_histories+=1; LOG.info("Updated %s through %s (+%s new, +%s recovered internal bars)",ticker,historical["date"].iloc[-1].date(),len(additions),len(backfills))
-                rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat()})
+                rolling=historical.tail(args.rolling_bars).copy(); rolling["ticker"]=ticker; rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat()})
             except Exception as exc:
-                failures.append({"security_id":security_id,"ticker":ticker,"error":str(exc)[:500]}); LOG.error("Failed production update for %s (%s): %s",ticker,security_id,exc); print(f"::warning title=Production OHLCV update failed::{ticker} ({security_id}): {str(exc)[:300]}"); rolling=historical.tail(args.rolling_bars).copy(); rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"stale_after_failure"})
+                failures.append({"security_id":security_id,"ticker":ticker,"error":str(exc)[:500]}); LOG.error("Failed production update for %s (%s): %s",ticker,security_id,exc); print(f"::warning title=Production OHLCV update failed::{ticker} ({security_id}): {str(exc)[:300]}"); rolling=historical.tail(args.rolling_bars).copy(); rolling["ticker"]=ticker; rolling_frames.append(rolling); details.append({"security_id":security_id,"ticker":ticker,"available_bars":len(historical),"rolling_bars":len(rolling),"last_date":historical["date"].iloc[-1].date().isoformat(),"update_status":"stale_after_failure"})
     failure_rate=len(failures)/len(operational_ids) if operational_ids else 1
     if failure_rate>0.10:raise RuntimeError(f"Failure rate {failure_rate:.1%} exceeds 10% safety threshold; production outputs not published")
     daily_outputs=[]
