@@ -65,7 +65,12 @@ def normalize_with_individual_fallback(batch_raw,symbol,last_date,max_retries,se
         except Exception as individual_exc:raise RuntimeError("batch and individual normalization/QC failed; "+f"batch={batch_exc}; individual={individual_exc}") from individual_exc
 
 def merge_downloaded_history(historical, downloaded, last_date):
-    """Persist recovered internal sessions as well as newer Yahoo bars."""
+    """Append new bars and missing internal sessions without silently rewriting history.
+
+    Existing dates are canonical. Provider corrections to an already-present date must
+    go through an explicit, reviewed repair path so recursive EMA state can be rebuilt
+    for every affected security before promotion.
+    """
     if downloaded.empty:
         empty=historical.iloc[0:0].copy()
         return historical, empty, empty
@@ -75,8 +80,10 @@ def merge_downloaded_history(historical, downloaded, last_date):
     backfills=downloaded[(downloaded["date"]<=last_date) & (~downloaded["date"].isin(existing_dates))].copy()
     if additions.empty and backfills.empty:
         return historical, additions, backfills
-    merged=pd.concat([historical,downloaded],ignore_index=True)
-    merged=merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"],keep="last").sort_values("date").reset_index(drop=True)
+    # Do not concatenate the entire overlapping provider window: that would replace
+    # canonical rows on duplicate dates whenever any new bar is present.
+    merged=pd.concat([historical,additions,backfills],ignore_index=True)
+    merged=merged[OHLCV_COLUMNS].drop_duplicates(subset=["date"],keep="first").sort_values("date").reset_index(drop=True)
     return merged, additions, backfills
 
 def normalize_existing(frame,security_id,ticker):
