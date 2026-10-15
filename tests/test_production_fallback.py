@@ -76,6 +76,34 @@ class ProductionFallbackTests(unittest.TestCase):
         self.assertTrue(result.empty)
         normalize.assert_not_called()
 
+    def test_merge_downloaded_history_preserves_existing_overlap_rows(self):
+        cols=update_production.OHLCV_COLUMNS
+        def row(date, close):
+            return {"date":pd.Timestamp(date),"security_id":"S","ticker":"X","open":close,"high":close,"low":close,"close":close,"adj_close":close,"volume":100}
+        historical=pd.DataFrame([
+            row("2026-09-21",10),
+            row("2026-09-22",11),
+            row("2026-09-23",12),
+        ],columns=cols)
+        downloaded=pd.DataFrame([
+            row("2026-09-21",99),
+            row("2026-09-22",99),
+            row("2026-09-23",99),
+            row("2026-09-24",13),
+        ],columns=cols)
+
+        merged,additions,backfills=update_production.merge_downloaded_history(
+            historical,downloaded,pd.Timestamp("2026-09-23")
+        )
+
+        self.assertEqual(additions["date"].dt.strftime("%Y-%m-%d").tolist(),["2026-09-24"])
+        self.assertTrue(backfills.empty)
+        by_date=merged.set_index(merged["date"].dt.strftime("%Y-%m-%d"))
+        self.assertEqual(by_date.loc["2026-09-21","close"],10)
+        self.assertEqual(by_date.loc["2026-09-22","close"],11)
+        self.assertEqual(by_date.loc["2026-09-23","close"],12)
+        self.assertEqual(by_date.loc["2026-09-24","close"],13)
+
     def test_merge_downloaded_history_repairs_internal_gap(self):
         cols=update_production.OHLCV_COLUMNS
         def row(date, close):
