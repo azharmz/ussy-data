@@ -1,0 +1,28 @@
+name: Temporary canonical overlap validation
+
+on:
+  push:
+    branches:
+      - fix/preserve-canonical-overlap
+    paths:
+      - src/update_production.py
+      - tests/test_production_fallback.py
+      - .github/workflows/validate-canonical-overlap-temp.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run full repository test suite
+        run: python -m unittest discover -s tests
