@@ -2,12 +2,6 @@ name: Prepare isolated CCTG repair bundle
 
 on:
   workflow_dispatch:
-  push:
-    branches: [repair/cctg-ema-isolated-bundle]
-    paths:
-      - ".github/workflows/prepare-cctg-repair-bundle.yml"
-      - "src/prepare_cctg_repair_bundle.py"
-      - "tests/test_prepare_cctg_repair_bundle.py"
 
 permissions:
   contents: read
