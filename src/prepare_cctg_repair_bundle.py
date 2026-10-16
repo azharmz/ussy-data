@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from datetime import UTC, datetime
 
+import numpy as np
 import pandas as pd
 
 from bootstrap_ohlcv import HISTORY_PREFIX, make_s3_client
@@ -120,6 +121,11 @@ def build_bundle(s3, bucket: str, output_dir: Path) -> dict:
     if state_date != cutoff:
         raise RuntimeError(f"CCTG READY cutoff {cutoff.date()} differs from EMA state date {state_date.date()}")
 
+    canonical_dates = canonical.copy()
+    canonical_dates["date"] = pd.to_datetime(canonical_dates["date"], errors="raise").dt.tz_localize(None).dt.normalize()
+    baseline_cutoff = canonical_dates.loc[canonical_dates["date"] <= cutoff].copy()
+    baseline_row = bootstrap_state(baseline_cutoff, SECURITY_ID)
+
     corrected, row_change = correct_only_adjusted_close(canonical, recovery)
     corrected_cutoff = corrected.loc[corrected["date"] <= cutoff].copy()
     if corrected_cutoff.empty or pd.Timestamp(corrected_cutoff["date"].max()) != cutoff:
@@ -131,6 +137,19 @@ def build_bundle(s3, bucket: str, output_dir: Path) -> dict:
         raise RuntimeError("Corrected history last adj_close differs from READY at cutoff")
 
     rebuilt_row = bootstrap_state(corrected_cutoff, SECURITY_ID)
+    ema_periods = (20, 50, 150, 200)
+    baseline_matches = {
+        f"ema{period}": bool(np.isclose(float(baseline_row[f"ema{period}"]), float(state_row.iloc[0][f"ema{period}"]), rtol=1e-8, atol=1e-8))
+        for period in ema_periods
+    }
+    corrected_matches = {
+        f"ema{period}": bool(np.isclose(float(rebuilt_row[f"ema{period}"]), float(state_row.iloc[0][f"ema{period}"]), rtol=1e-8, atol=1e-8))
+        for period in ema_periods
+    }
+    if all(baseline_matches.values()):
+        raise RuntimeError("Fail closed: uncorrected canonical history unexpectedly passes official EMA tolerance")
+    if not all(corrected_matches.values()):
+        raise RuntimeError(f"Corrected history does not pass official EMA tolerance: {corrected_matches}")
     for col in ("as_of_date", "last_price"):
         if col == "as_of_date":
             if pd.Timestamp(rebuilt_row[col]).normalize() != cutoff:
@@ -181,6 +200,9 @@ def build_bundle(s3, bucket: str, output_dir: Path) -> dict:
         "ema_candidate_sha256": sha256(candidate_buf.getvalue()),
         "persisted_cctg_ema_before": _state_row_json(state_row.iloc[0].to_dict()),
         "rebuilt_cctg_ema_after": _state_row_json(rebuilt_row),
+        "baseline_official_ema_matches": baseline_matches,
+        "corrected_official_ema_matches": corrected_matches,
+        "candidate_ema_row_changed_vs_persisted": any(float(rebuilt_row[f"ema{period}"]) != float(state_row.iloc[0][f"ema{period}"]) for period in ema_periods),
         "other_security_ema_rows_changed": 0,
         "r2_writes": 0,
         "production_pointer_writes": 0,
