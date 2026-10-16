@@ -2,6 +2,12 @@ name: Prepare isolated CCTG repair bundle
 
 on:
   workflow_dispatch:
+  push:
+    branches: [repair/cctg-ema-isolated-bundle]
+    paths:
+      - ".github/workflows/prepare-cctg-repair-bundle.yml"
+      - "src/prepare_cctg_repair_bundle.py"
+      - "tests/test_prepare_cctg_repair_bundle.py"
 
 permissions:
   contents: read
@@ -29,7 +35,7 @@ jobs:
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Unit tests
-        run: python -m unittest tests.test_prepare_cctg_repair_bundle
+        run: python -m unittest discover -s tests -p 'test_prepare_cctg_repair_bundle.py'
       - name: Build local-only backup and candidate bundle
         run: python src/prepare_cctg_repair_bundle.py --output-dir artifacts/cctg-repair-bundle
       - name: Upload review artifact only
