@@ -81,6 +81,18 @@ def correct_only_adjusted_close(history: pd.DataFrame, recovery: pd.DataFrame) -
     }
 
 
+def _state_row_json(row: dict) -> dict:
+    result = {}
+    for key, value in row.items():
+        if key in {"security_id", "ticker"}:
+            result[key] = str(value)
+        elif key == "as_of_date":
+            result[key] = pd.Timestamp(value).date().isoformat()
+        else:
+            result[key] = float(value)
+    return result
+
+
 def build_bundle(s3, bucket: str, output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     backup_dir = output_dir / "backup"
@@ -167,8 +179,8 @@ def build_bundle(s3, bucket: str, output_dir: Path) -> dict:
         "corrected_history_sha256": sha256(corrected_buf.getvalue()),
         "ema_candidate_file": "candidate/ema-state-candidate.parquet",
         "ema_candidate_sha256": sha256(candidate_buf.getvalue()),
-        "persisted_cctg_ema_before": {k: (pd.Timestamp(v).date().isoformat() if k == "as_of_date" else float(v) if k != "ticker" else str(v)) for k, v in state_row.iloc[0].to_dict().items()},
-        "rebuilt_cctg_ema_after": {k: (pd.Timestamp(v).date().isoformat() if k == "as_of_date" else float(v) if k != "ticker" else str(v)) for k, v in rebuilt_row.items()},
+        "persisted_cctg_ema_before": _state_row_json(state_row.iloc[0].to_dict()),
+        "rebuilt_cctg_ema_after": _state_row_json(rebuilt_row),
         "other_security_ema_rows_changed": 0,
         "r2_writes": 0,
         "production_pointer_writes": 0,
