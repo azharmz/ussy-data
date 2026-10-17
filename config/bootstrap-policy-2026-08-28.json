@@ -1159,6 +1159,15 @@
       "detail": "Halted since 2026-01-15; NYSE announced delisting proceedings 2026-06-12.",
       "source": "https://www.morningstar.com/news/business-wire/20260612158356/nyse-american-to-commence-delisting-proceedings-against-jm-group-limited-jmg",
       "reviewed_at": "2026-09-02"
+    },
+    {
+      "security_id": "KYG712641086",
+      "ticker": "PLTS",
+      "reason": "Suspended / delisting decision",
+      "event_date": "2026-09-23",
+      "detail": "Nasdaq Hearings Panel denied reinstatement and determined to delist; trading suspended at market open 2026-09-23. Do not retry Yahoo bootstrap for the suspended primary listing. Preserve any existing canonical history.",
+      "source": "https://www.nasdaq.com/press-release/platinum-analytics-cayman-limited-announces-nasdaq-hearings-panel-delisting-decision",
+      "reviewed_at": "2026-10-17"
     }
   ],
   "note": "235 retry-eligible candidates including MBGL WI→MBGL. Prior run uploaded 234; always recheck R2 and skip existing histories. 27 deferred are operational/review cases, NOT changes to compliance.",
