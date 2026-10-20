@@ -9,6 +9,15 @@
       "reason": "Canonical READY is missing the 2026-09-22 session for 1066 securities that reached 2026-09-23; read-only audit run 35939191539.",
       "last_known_good_as_of_date": "2026-09-21",
       "incident_date": "2026-09-24"
+    },
+    {
+      "ready_as_of_date": "2026-10-15",
+      "ready_sha256": "e5a03074105fc103fbaf1d831f64ab783719f16f30a1dda5c6507fba5e765549",
+      "parquet_key": "production/ready/runs/2026-10-15.parquet",
+      "status": "INVALID_CONTINUITY",
+      "reason": "Canonical READY omits DDS sessions 2026-10-12 and 2026-10-13. Source history repaired with validated Yahoo repair=True rows and immutable backup; current READY remains stale until rolling/READY rebuild. Read-only continuity audit run 39385282130; prior gap-free READY through 2026-10-09 verified by the same run.",
+      "last_known_good_as_of_date": "2026-10-09",
+      "incident_date": "2026-10-20"
     }
   ]
 }
