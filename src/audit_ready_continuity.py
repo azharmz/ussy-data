@@ -53,34 +53,40 @@ def main():
         try:
             targets=[pd.Timestamp(d).date() for d in missing_sessions]
             fields=["Open","High","Low","Close","Adj Close","Volume"]
-            for target in targets:
-                item={}
-                fallback=yf.Ticker(yahoo_symbol_name).history(
-                    start=(target-timedelta(days=7)).isoformat(),
-                    end=(target+timedelta(days=3)).isoformat(),
-                    interval="1d",auto_adjust=False,actions=False,repair=True)
-                dates=pd.Index(pd.to_datetime(fallback.index,errors="coerce")).date if not fallback.empty else pd.Index([])
-                matching=fallback.loc[dates==target] if not fallback.empty else pd.DataFrame()
-                item["repair_fallback_row_count"]=int(len(matching))
-                if len(matching)==1 and all(field in matching.columns for field in fields):
-                    row=matching.iloc[0]
+            def row_evidence(frame,target):
+                dates=pd.Index(pd.to_datetime(frame.index,errors="coerce")).date if not frame.empty else pd.Index([])
+                rows=frame.loc[dates==target] if not frame.empty else pd.DataFrame()
+                item={"row_count":int(len(rows))}
+                if len(rows)==1 and all(field in rows.columns for field in fields):
+                    row=rows.iloc[0]
                     vals={field:(None if pd.isna(row[field]) else float(row[field])) for field in fields}
-                    missing_fields=[field for field,value in vals.items() if value is None]
-                    if missing_fields:
-                        item.update(repair_fallback_status="INVALID",
-                                    repair_fallback_reason="missing_values:"+",".join(missing_fields),
-                                    repair_fallback_values=vals)
-                    else:
-                        valid=(min(vals[x] for x in ["Open","High","Low","Close","Adj Close"])>0
-                               and vals["Volume"]>=0
-                               and vals["High"]>=max(vals["Open"],vals["Close"],vals["Low"])
-                               and vals["Low"]<=min(vals["Open"],vals["Close"],vals["High"]))
-                        item.update(repair_fallback_status="VALID" if valid else "INVALID",
-                                    repair_fallback_reason=None if valid else "OHLCV bounds/positivity check failed",
-                                    repair_fallback_values=vals)
+                    missing=[field for field,value in vals.items() if value is None]
+                    valid=(not missing and min(vals[x] for x in ["Open","High","Low","Close","Adj Close"])>0
+                           and vals["Volume"]>=0
+                           and vals["High"]>=max(vals["Open"],vals["Close"],vals["Low"])
+                           and vals["Low"]<=min(vals["Open"],vals["Close"],vals["High"]))
+                    item.update(status="VALID" if valid else "INVALID",
+                                reason=("missing_values:"+",".join(missing)) if missing else (None if valid else "OHLCV bounds/positivity check failed"),
+                                values=vals)
                 else:
-                    item["repair_fallback_status"]="NO_SINGLE_COMPLETE_ROW"
-                yahoo_evidence["sessions"][target.isoformat()]=item
+                    item["status"]="NO_SINGLE_COMPLETE_ROW"
+                return item
+            combined=yf.Ticker(yahoo_symbol_name).history(
+                start=(min(targets)-timedelta(days=7)).isoformat(),
+                end=(max(targets)+timedelta(days=3)).isoformat(),
+                interval="1d",auto_adjust=False,actions=False,repair=True)
+            for target in targets:
+                start=(target-timedelta(days=7)).isoformat()
+                end=(target+timedelta(days=3)).isoformat()
+                raw_history=yf.Ticker(yahoo_symbol_name).history(
+                    start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=False)
+                repaired_history=yf.Ticker(yahoo_symbol_name).history(
+                    start=start,end=end,interval="1d",auto_adjust=False,actions=False,repair=True)
+                yahoo_evidence["sessions"][target.isoformat()]={
+                    "single_window_raw":row_evidence(raw_history,target),
+                    "single_window_repair":row_evidence(repaired_history,target),
+                    "combined_window_repair":row_evidence(combined,target),
+                }
         except Exception as exc:
             yahoo_evidence["error"]=str(exc)[:300]
         gaps.append({"security_id":sid,"ticker":ticker,
