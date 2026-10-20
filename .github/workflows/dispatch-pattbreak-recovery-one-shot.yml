@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   dispatch:
+    if: github.sha == '472b625dcf08525a357fc8f70ac7f14e9ad0b780'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
