@@ -1,11 +1,6 @@
 name: Audit READY continuity one-shot
 
 on:
-  push:
-    paths:
-      - ".github/workflows/audit-ready-continuity-one-shot.yml"
-      - "src/audit_ready_continuity.py"
-
 permissions:
   contents: read
 

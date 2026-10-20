@@ -1,11 +1,5 @@
 name: Repair DDS October READY gap one-shot
 on:
-  push:
-    paths:
-      - "src/repair_specific_history_sessions.py"
-      - "tests/test_repair_specific_history_sessions.py"
-      - ".github/workflows/repair-dds-october-gap-one-shot.yml"
-
 permissions:
   contents: read
 

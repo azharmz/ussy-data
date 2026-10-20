@@ -1,9 +1,5 @@
 name: Repair BTOC October READY gap one-shot
 on:
-  push:
-    paths:
-      - ".github/workflows/repair-btoc-october-gap-one-shot.yml"
-
 permissions:
   contents: read
 
