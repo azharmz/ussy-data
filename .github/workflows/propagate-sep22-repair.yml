@@ -1,11 +1,6 @@
 name: Propagate Sep22 canonical repair
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "src/rebuild_rolling_from_canonical.py"
-      - ".github/workflows/propagate-sep22-repair.yml"
 permissions:
   contents: read
 env:
