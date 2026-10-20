@@ -35,7 +35,7 @@ def main():
             for d in missing_sessions:
                 subset=history.loc[history_date_rows==d,OHLCV_COLUMNS]
                 stored_rows[d]=[
-                    {col:(int(row[col]) if col=="volume" else (str(row[col]) if col=="date" else float(row[col])))
+                    {col:(int(row[col]) if col=="volume" else (str(row[col]) if col in ("date","security_id","ticker") else float(row[col])))
                      for col in OHLCV_COLUMNS}
                     for _,row in subset.iterrows()
                 ]
