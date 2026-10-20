@@ -6,8 +6,10 @@ an observed intermediate session after --previous-as-of.
 """
 from __future__ import annotations
 import argparse, io, json, os
+from datetime import timedelta
 import pandas as pd
-from bootstrap_ohlcv import HISTORY_PREFIX, make_s3_client
+import yfinance as yf
+from bootstrap_ohlcv import HISTORY_PREFIX, make_s3_client, yahoo_symbol
 from export_ready import recent_session_gap_summary
 
 def main():
@@ -35,8 +37,50 @@ def main():
             })
         except Exception as exc:
             evidence["history_read_error"]=str(exc)[:300]
-        gaps.append({"security_id":sid,"ticker":ticker_by_sid.get(sid),
-                     "missing_sessions":missing_sessions,"source_history":evidence})
+        ticker=ticker_by_sid.get(sid)
+        yahoo_symbol_name=yahoo_symbol(ticker,sid) if ticker else None
+        yahoo_evidence={"symbol":yahoo_symbol_name,"sessions":{}}
+        try:
+            targets=[pd.Timestamp(d).date() for d in missing_sessions]
+            start=(min(targets)-timedelta(days=1)).isoformat()
+            end=(max(targets)+timedelta(days=2)).isoformat()
+            raw=yf.download(yahoo_symbol_name,start=start,end=end,interval="1d",
+                            auto_adjust=False,actions=False,repair=False,keepna=True,
+                            progress=False,group_by="ticker",threads=False,timeout=30)
+            one=raw
+            if isinstance(raw.columns,pd.MultiIndex):
+                if yahoo_symbol_name in raw.columns.get_level_values(0):
+                    one=raw[yahoo_symbol_name]
+                elif yahoo_symbol_name in raw.columns.get_level_values(1):
+                    one=raw.xs(yahoo_symbol_name,axis=1,level=1)
+                else:
+                    one=pd.DataFrame()
+            fields=["Open","High","Low","Close","Adj Close","Volume"]
+            for target in targets:
+                matching=one.loc[pd.Index(pd.to_datetime(one.index,errors="coerce")).date==target] if not one.empty else pd.DataFrame()
+                item={"row_count":int(len(matching))}
+                if len(matching)==1 and all(field in matching.columns for field in fields):
+                    row=matching.iloc[0]
+                    vals={field:(None if pd.isna(row[field]) else float(row[field])) for field in fields}
+                    missing_fields=[field for field,value in vals.items() if value is None]
+                    if missing_fields:
+                        item.update(status="INVALID",reason="missing_values:"+",".join(missing_fields),values=vals)
+                    else:
+                        valid=(min(vals[x] for x in ["Open","High","Low","Close","Adj Close"])>0
+                               and vals["Volume"]>=0
+                               and vals["High"]>=max(vals["Open"],vals["Close"],vals["Low"])
+                               and vals["Low"]<=min(vals["Open"],vals["Close"],vals["High"]))
+                        item.update(status="VALID" if valid else "INVALID",
+                                    reason=None if valid else "OHLCV bounds/positivity check failed",
+                                    values=vals)
+                else:
+                    item.update(status="NO_SINGLE_COMPLETE_ROW")
+                yahoo_evidence["sessions"][target.isoformat()]=item
+        except Exception as exc:
+            yahoo_evidence["error"]=str(exc)[:300]
+        gaps.append({"security_id":sid,"ticker":ticker,
+                     "missing_sessions":missing_sessions,"source_history":evidence,
+                     "yahoo_raw_evidence":yahoo_evidence})
     out={k:v for k,v in summary.items() if k!="gaps"}
     out["ready_as_of_date"]=manifest["as_of_date"]
     out["ready_sha256"]=manifest["sha256"]
