@@ -20,10 +20,18 @@ jobs:
           cache: pip
       - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
       # Read-only R2 audit; does not publish or mutate READY.
-      - name: Audit canonical READY for 21-to-23 Sep catch-up gaps
+      - name: Audit current canonical READY continuity
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
         run: python src/audit_ready_continuity.py --previous-as-of 2026-09-21
+      - name: Verify prior immutable READY through 2026-10-09
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          PYTHONUNBUFFERED: "1"
+        run: python src/audit_ready_continuity.py --previous-as-of 2026-09-21 --snapshot-date 2026-10-09
