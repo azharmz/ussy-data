@@ -35,3 +35,11 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           PYTHONUNBUFFERED: "1"
         run: python src/audit_ready_continuity.py --previous-as-of 2026-09-21 --snapshot-date 2026-10-09
+      - name: Audit current rolling candidate continuity before READY publication
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          PYTHONUNBUFFERED: "1"
+        run: python src/audit_ready_continuity.py --previous-as-of 2026-10-09 --rolling-candidate

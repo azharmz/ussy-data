@@ -10,15 +10,22 @@ from datetime import timedelta
 import pandas as pd
 import yfinance as yf
 from bootstrap_ohlcv import HISTORY_PREFIX, OHLCV_COLUMNS, make_s3_client, yahoo_symbol
-from export_ready import recent_session_gap_summary
+from export_ready import recent_session_gap_summary, terminal_date_summary
 
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--previous-as-of", required=True)
     p.add_argument("--snapshot-date", help="Audit immutable production/ready/runs/YYYY-MM-DD.parquet instead of current pointer")
+    p.add_argument("--rolling-candidate", action="store_true", help="Audit production/rolling/latest.parquet without publishing READY")
     args=p.parse_args()
     s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
-    if args.snapshot_date:
+    if args.rolling_candidate:
+        ready_key="production/rolling/latest.parquet"
+        raw=s3.get_object(Bucket=bucket,Key=ready_key)["Body"].read()
+        frame=pd.read_parquet(io.BytesIO(raw),columns=["security_id","ticker","date"])
+        ready_as_of_date=terminal_date_summary(frame)["as_of_date"]
+        ready_sha256=hashlib.sha256(raw).hexdigest()
+    elif args.snapshot_date:
         ready_key=f"production/ready/runs/{args.snapshot_date}.parquet"
         raw=s3.get_object(Bucket=bucket,Key=ready_key)["Body"].read()
         ready_as_of_date=args.snapshot_date
@@ -29,7 +36,8 @@ def main():
         ready_as_of_date=manifest["as_of_date"]
         ready_sha256=manifest["sha256"]
         ready_key=manifest["parquet_key"]
-    frame=pd.read_parquet(io.BytesIO(raw),columns=["security_id","ticker","date"])
+    if not args.rolling_candidate:
+        frame=pd.read_parquet(io.BytesIO(raw),columns=["security_id","ticker","date"])
     summary=recent_session_gap_summary(frame,args.previous_as_of,ready_as_of_date)
     ticker_by_sid=(frame.sort_values("date").groupby("security_id")["ticker"].last().astype(str).to_dict())
     gaps=[]
