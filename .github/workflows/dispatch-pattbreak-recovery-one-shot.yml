@@ -1,10 +1,6 @@
 name: Dispatch Pattern Breakout after recovered READY
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/dispatch-pattbreak-recovery-one-shot.yml"
 
 permissions:
   contents: read
