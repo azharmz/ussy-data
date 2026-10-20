@@ -1,6 +1,7 @@
 name: Audit READY continuity one-shot
 
 on:
+  workflow_dispatch:
 permissions:
   contents: read
 
