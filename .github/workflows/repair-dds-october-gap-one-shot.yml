@@ -1,0 +1,42 @@
+name: Repair DDS October READY gap one-shot
+on:
+  push:
+    paths:
+      - "src/repair_specific_history_sessions.py"
+      - "tests/test_repair_specific_history_sessions.py"
+      - ".github/workflows/repair-dds-october-gap-one-shot.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: targeted-dds-history-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
+      - name: Test bounded history merge before any R2 write
+        run: python -m unittest tests.test_repair_specific_history_sessions
+      - name: Repair only audited DDS sessions with backup and conditional write
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          PYTHONUNBUFFERED: "1"
+        run: >-
+          python src/repair_specific_history_sessions.py
+          --security-id US2540671011
+          --ticker DDS
+          --target-dates 2026-10-12,2026-10-13
+          --expected-ready-as-of 2026-10-15
+          --expected-ready-sha256 e5a03074105fc103fbaf1d831f64ab783719f16f30a1dda5c6507fba5e765549
