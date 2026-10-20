@@ -15,7 +15,18 @@ env:
   R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
   PYTHONUNBUFFERED: "1"
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12", cache: pip}
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run complete unit test suite before rebuilding production projections
+        run: python -m unittest discover -s tests
   rolling:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -23,6 +34,29 @@ jobs:
       - uses: actions/setup-python@v7
         with: {python-version: "3.12", cache: pip}
       - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Verify audited repair sessions are present in canonical histories
+        run: |
+          PYTHONPATH=src python - <<'PY'
+          import io, os
+          import pandas as pd
+          from bootstrap_ohlcv import HISTORY_PREFIX, make_s3_client
+          s3=make_s3_client(); bucket=os.environ["R2_BUCKET_NAME"]
+          expected={
+              "US2540671011":["2026-10-12","2026-10-13"],
+              "US0422551095":["2026-10-15"],
+          }
+          for sid, targets in expected.items():
+              key=f"{HISTORY_PREFIX}{sid}.parquet"
+              raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
+              frame=pd.read_parquet(io.BytesIO(raw))
+              dates=pd.to_datetime(frame["date"],errors="raise").dt.date.astype(str)
+              if frame.duplicated(["security_id","date"]).any():
+                  raise RuntimeError(f"{sid}: duplicate security/date rows")
+              for target in targets:
+                  if int((dates==target).sum()) != 1:
+                      raise RuntimeError(f"{sid}: expected exactly one {target} row")
+              print(f"REPAIR_SOURCE_VERIFIED {sid} targets={targets} rows={len(frame)}")
+          PY
       - run: python src/rebuild_rolling_from_canonical.py
   ready:
     needs: rolling
