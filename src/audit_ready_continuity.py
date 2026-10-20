@@ -9,7 +9,7 @@ import argparse, io, json, os
 from datetime import timedelta
 import pandas as pd
 import yfinance as yf
-from bootstrap_ohlcv import HISTORY_PREFIX, make_s3_client, yahoo_symbol
+from bootstrap_ohlcv import HISTORY_PREFIX, OHLCV_COLUMNS, make_s3_client, yahoo_symbol
 from export_ready import recent_session_gap_summary
 
 def main():
@@ -28,12 +28,22 @@ def main():
         evidence={"history_key":key}
         try:
             history_raw=s3.get_object(Bucket=bucket,Key=key)["Body"].read()
-            history=pd.read_parquet(io.BytesIO(history_raw),columns=["date"])
+            history=pd.read_parquet(io.BytesIO(history_raw),columns=OHLCV_COLUMNS)
             history_dates=set(pd.to_datetime(history["date"],errors="raise").dt.date.astype(str))
+            history_date_rows=pd.to_datetime(history["date"],errors="raise").dt.date.astype(str)
+            stored_rows={}
+            for d in missing_sessions:
+                subset=history.loc[history_date_rows==d,OHLCV_COLUMNS]
+                stored_rows[d]=[
+                    {col:(int(row[col]) if col=="volume" else (str(row[col]) if col=="date" else float(row[col])))
+                     for col in OHLCV_COLUMNS}
+                    for _,row in subset.iterrows()
+                ]
             evidence.update({
                 "history_rows":int(len(history)),
                 "history_latest_date":max(history_dates) if history_dates else None,
                 "missing_sessions_present_in_history":{d:d in history_dates for d in missing_sessions},
+                "target_rows_now_in_history":stored_rows,
             })
         except Exception as exc:
             evidence["history_read_error"]=str(exc)[:300]
@@ -42,63 +52,34 @@ def main():
         yahoo_evidence={"symbol":yahoo_symbol_name,"sessions":{}}
         try:
             targets=[pd.Timestamp(d).date() for d in missing_sessions]
-            start=(min(targets)-timedelta(days=1)).isoformat()
-            end=(max(targets)+timedelta(days=2)).isoformat()
-            raw=yf.download(yahoo_symbol_name,start=start,end=end,interval="1d",
-                            auto_adjust=False,actions=False,repair=False,keepna=True,
-                            progress=False,group_by="ticker",threads=False,timeout=30)
-            one=raw
-            if isinstance(raw.columns,pd.MultiIndex):
-                if yahoo_symbol_name in raw.columns.get_level_values(0):
-                    one=raw[yahoo_symbol_name]
-                elif yahoo_symbol_name in raw.columns.get_level_values(1):
-                    one=raw.xs(yahoo_symbol_name,axis=1,level=1)
-                else:
-                    one=pd.DataFrame()
             fields=["Open","High","Low","Close","Adj Close","Volume"]
             for target in targets:
-                matching=one.loc[pd.Index(pd.to_datetime(one.index,errors="coerce")).date==target] if not one.empty else pd.DataFrame()
-                item={"raw_row_count":int(len(matching))}
+                item={}
+                fallback=yf.Ticker(yahoo_symbol_name).history(
+                    start=(target-timedelta(days=7)).isoformat(),
+                    end=(target+timedelta(days=3)).isoformat(),
+                    interval="1d",auto_adjust=False,actions=False,repair=True)
+                dates=pd.Index(pd.to_datetime(fallback.index,errors="coerce")).date if not fallback.empty else pd.Index([])
+                matching=fallback.loc[dates==target] if not fallback.empty else pd.DataFrame()
+                item["repair_fallback_row_count"]=int(len(matching))
                 if len(matching)==1 and all(field in matching.columns for field in fields):
                     row=matching.iloc[0]
                     vals={field:(None if pd.isna(row[field]) else float(row[field])) for field in fields}
                     missing_fields=[field for field,value in vals.items() if value is None]
                     if missing_fields:
-                        item.update(raw_status="INVALID",raw_reason="missing_values:"+",".join(missing_fields),raw_values=vals)
+                        item.update(repair_fallback_status="INVALID",
+                                    repair_fallback_reason="missing_values:"+",".join(missing_fields),
+                                    repair_fallback_values=vals)
                     else:
                         valid=(min(vals[x] for x in ["Open","High","Low","Close","Adj Close"])>0
                                and vals["Volume"]>=0
                                and vals["High"]>=max(vals["Open"],vals["Close"],vals["Low"])
                                and vals["Low"]<=min(vals["Open"],vals["Close"],vals["High"]))
-                        item.update(raw_status="VALID" if valid else "INVALID",
-                                    raw_reason=None if valid else "OHLCV bounds/positivity check failed",
-                                    raw_values=vals)
+                        item.update(repair_fallback_status="VALID" if valid else "INVALID",
+                                    repair_fallback_reason=None if valid else "OHLCV bounds/positivity check failed",
+                                    repair_fallback_values=vals)
                 else:
-                    item["raw_status"]="NO_SINGLE_COMPLETE_ROW"
-                if item["raw_status"]!="VALID":
-                    fallback=yf.Ticker(yahoo_symbol_name).history(
-                        start=(target-timedelta(days=7)).isoformat(),
-                        end=(target+timedelta(days=3)).isoformat(),
-                        interval="1d",auto_adjust=False,actions=False,repair=True)
-                    fallback_dates=pd.Index(pd.to_datetime(fallback.index,errors="coerce")).date if not fallback.empty else pd.Index([])
-                    repaired_rows=fallback.loc[fallback_dates==target] if not fallback.empty else pd.DataFrame()
-                    item["repair_fallback_row_count"]=int(len(repaired_rows))
-                    if len(repaired_rows)==1 and all(field in repaired_rows.columns for field in fields):
-                        row=repaired_rows.iloc[0]
-                        vals={field:(None if pd.isna(row[field]) else float(row[field])) for field in fields}
-                        missing_fields=[field for field,value in vals.items() if value is None]
-                        if missing_fields:
-                            item.update(repair_fallback_status="INVALID",repair_fallback_reason="missing_values:"+",".join(missing_fields),repair_fallback_values=vals)
-                        else:
-                            valid=(min(vals[x] for x in ["Open","High","Low","Close","Adj Close"])>0
-                                   and vals["Volume"]>=0
-                                   and vals["High"]>=max(vals["Open"],vals["Close"],vals["Low"])
-                                   and vals["Low"]<=min(vals["Open"],vals["Close"],vals["High"]))
-                            item.update(repair_fallback_status="VALID" if valid else "INVALID",
-                                        repair_fallback_reason=None if valid else "OHLCV bounds/positivity check failed",
-                                        repair_fallback_values=vals)
-                    else:
-                        item["repair_fallback_status"]="NO_SINGLE_COMPLETE_ROW"
+                    item["repair_fallback_status"]="NO_SINGLE_COMPLETE_ROW"
                 yahoo_evidence["sessions"][target.isoformat()]=item
         except Exception as exc:
             yahoo_evidence["error"]=str(exc)[:300]
