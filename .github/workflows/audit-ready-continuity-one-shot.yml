@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt scipy
       # Read-only R2 audit; does not publish or mutate READY.
       - name: Audit canonical READY for 21-to-23 Sep catch-up gaps
         env:
